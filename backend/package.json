@@ -1,0 +1,54 @@
+{
+<<<<<<< HEAD
+  "name": "clinex-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "laravel-echo": "^2.1.6",
+    "lucide-react": "^0.525.0",
+    "next": "15.3.4",
+    "pusher-js": "^8.4.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+=======
+    "$schema": "https://json.schemastore.org/package.json",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite"
+    },
+    "devDependencies": {
+        "@tailwindcss/forms": "^0.5.2",
+        "@tailwindcss/vite": "^4.0.0",
+        "alpinejs": "^3.4.2",
+        "autoprefixer": "^10.4.2",
+        "axios": "^1.8.2",
+        "concurrently": "^9.0.1",
+        "laravel-echo": "^2.1.6",
+        "laravel-vite-plugin": "^1.2.0",
+        "postcss": "^8.4.31",
+        "pusher-js": "^8.4.0",
+        "tailwindcss": "^3.1.0",
+        "vite": "^6.2.4"
+    }
+>>>>>>> 7cbfb8e38cad0891684a54549f2fad663a89ef39
+}

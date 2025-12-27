@@ -1,0 +1,18 @@
+nin:/Name
+: HIM TULOH
+အာយុ/Age
+: 58 Y
+Patient ID
+: PT001875
+Lab ID
+: LT001238
+Requested Date
+: 17/03/2024 21:55
+ភេទ/Gender
+: Male
+ទូរស័ព្ទ/Phone
+: 0972515794
+Requested By
+: Dr. CHHORN Sophy
+Analysis Date
+: 17/03/2024 21:55
