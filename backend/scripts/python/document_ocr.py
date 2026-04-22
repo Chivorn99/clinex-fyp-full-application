@@ -65,6 +65,26 @@ def _get_google_config() -> Dict[str, str]:
     }
 
 
+def _get_paddle_config() -> Dict[str, Any]:
+    """Load PaddleOCR configuration from environment."""
+    base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    dotenv_path = os.path.join(base_path, '.env')
+
+    def get_config_value(key: str, default: Optional[str] = None) -> Optional[str]:
+        return os.getenv(key) or _read_env_value_from_dotenv(dotenv_path, key) or default
+
+    enabled = get_config_value('PADDLE_OCR_ENABLED', 'false').lower() in ('true', '1', 'yes')
+    language = get_config_value('PADDLE_OCR_LANGUAGE', 'ch')
+    confidence_threshold = float(get_config_value('PADDLE_OCR_CONFIDENCE_THRESHOLD', '0.85'))
+
+    return {
+        'enabled': enabled,
+        'language': language,
+        'confidence_threshold': confidence_threshold,
+    }
+
+
+
 def _infer_mime_type(file_path: str) -> str:
     extension = Path(file_path).suffix.lower()
     explicit_map = {
@@ -120,6 +140,96 @@ def _preprocess_image_for_ocr(file_path: str) -> bytes:
         print(f'DEBUG: Image preprocessing unavailable or failed ({preprocessing_error}); using original image bytes', file=sys.stderr)
         with open(file_path, 'rb') as source:
             return source.read()
+
+
+def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
+    """
+    Extract text from document using PaddleOCR with confidence scoring.
+    Returns: {'text': extracted_text, 'confidence': average_confidence, 'page_confidences': [list of page confidences]}
+    """
+    try:
+        from paddleocr import PaddleOCR
+    except ImportError:
+        raise ImportError('paddleocr not installed. Install with: pip install paddleocr')
+
+    paddle_config = _get_paddle_config()
+    mime_type = _infer_mime_type(file_path)
+
+    try:
+        # Initialize PaddleOCR with configured language
+        # PaddleOCR 3.5.0+ has simplified API
+        ocr = PaddleOCR(lang=paddle_config['language'])
+
+        # Handle PDFs by converting to images first
+        if mime_type == 'application/pdf':
+            try:
+                import fitz
+                doc = fitz.open(file_path)
+                all_text = ''
+                page_confidences = []
+                
+                for page_num in range(len(doc)):
+                    page = doc.load_page(page_num)
+                    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                    img_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
+                    pix.save(img_path)
+
+                    try:
+                        result = ocr.ocr(img_path)
+                        page_text, page_confidence = _parse_paddle_result(result)
+                        all_text += page_text + '\n'
+                        page_confidences.append(page_confidence)
+                        print(f'DEBUG: PaddleOCR processed page {page_num + 1} with confidence {page_confidence:.3f}', file=sys.stderr)
+                    finally:
+                        if os.path.exists(img_path):
+                            os.remove(img_path)
+
+                doc.close()
+                avg_confidence = sum(page_confidences) / len(page_confidences) if page_confidences else 0.0
+                print(f'DEBUG: PaddleOCR extracted {len(all_text)} characters with avg confidence {avg_confidence:.3f}', file=sys.stderr)
+                return {
+                    'text': all_text,
+                    'confidence': avg_confidence,
+                    'page_confidences': page_confidences
+                }
+            except ImportError:
+                raise Exception('PyMuPDF required for PDF processing with PaddleOCR. Install with: pip install PyMuPDF')
+        else:
+            # Direct image processing
+            result = ocr.ocr(file_path)
+            text, confidence = _parse_paddle_result(result)
+            print(f'DEBUG: PaddleOCR extracted {len(text)} characters with confidence {confidence:.3f}', file=sys.stderr)
+            return {
+                'text': text,
+                'confidence': confidence,
+                'page_confidences': [confidence]
+            }
+
+    except Exception as e:
+        print(f'DEBUG: PaddleOCR failed: {e}', file=sys.stderr)
+        raise
+
+
+def _parse_paddle_result(ocr_result: List[Any]) -> tuple:
+    """
+    Parse PaddleOCR result and calculate average confidence.
+    Returns: (extracted_text, average_confidence)
+    """
+    text_lines = []
+    confidences = []
+
+    for line in ocr_result:
+        if line:
+            for word_info in line:
+                text, conf = word_info[1], word_info[2]
+                text_lines.append(text)
+                confidences.append(conf)
+
+    extracted_text = ' '.join(text_lines)
+    avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+
+    return extracted_text, avg_confidence
+
 
 class OptimizedLabReportParser:
     def __init__(self):
@@ -595,17 +705,55 @@ def extract_text_from_pdf_local(pdf_path: str) -> str:
         raise Exception(f'All PDF extraction methods failed. Last error: {str(e)}')
 
 def process_single_file(file_path: str) -> Dict[str, Any]:
+    paddle_config = {}
+    ocr_text = None
+    confidence = 0.0
+    ocr_engine = 'unknown'
+    parser = None
+    
     try:
         mime_type = _infer_mime_type(file_path)
+        paddle_config = _get_paddle_config()
+        
         if mime_type in {'application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp'}:
-            ocr_text = process_with_google_document_ai(file_path)
+            # Try PaddleOCR if enabled
+            ocr_text = None
+            confidence = 0.0
+            ocr_engine = 'google'
+
+            if paddle_config['enabled']:
+                try:
+                    paddle_result = process_with_paddle_ocr(file_path)
+                    ocr_text = paddle_result['text']
+                    confidence = paddle_result['confidence']
+                    ocr_engine = 'paddle'
+                    
+                    # Check if confidence meets threshold; if not, fall back to Google
+                    if confidence < paddle_config['confidence_threshold']:
+                        print(f'DEBUG: PaddleOCR confidence {confidence:.3f} below threshold {paddle_config["confidence_threshold"]}, falling back to Google Document AI', file=sys.stderr)
+                        ocr_text = process_with_google_document_ai(file_path)
+                        ocr_engine = 'google (fallback from paddle)'
+                except Exception as paddle_error:
+                    print(f'DEBUG: PaddleOCR failed ({paddle_error}), falling back to Google Document AI', file=sys.stderr)
+                    ocr_text = process_with_google_document_ai(file_path)
+                    ocr_engine = 'google (fallback from paddle)'
+            else:
+                # Use Google Document AI directly
+                ocr_text = process_with_google_document_ai(file_path)
+                ocr_engine = 'google'
+
         else:
             with open(file_path, 'r', encoding='utf-8') as f:
                 ocr_text = f.read()
+            ocr_engine = 'text'
+
         parser = OptimizedLabReportParser()
         result = parser.parse_optimized(ocr_text)
         result['source_file'] = os.path.basename(file_path)
         result['success'] = True
+        result['ocr_engine'] = ocr_engine
+        if paddle_config.get('enabled'):
+            result['confidence'] = confidence
         return result
     except Exception as e:
         return {
@@ -613,8 +761,8 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
             'error': str(e),
             'success': False,
             'debug': {
-                'ocr_length': len(ocr_text) if 'ocr_text' in locals() else 0,
-                'failed_patterns': getattr(parser, 'failed_patterns', []) if 'parser' in locals() else []
+                'ocr_length': len(ocr_text) if ocr_text else 0,
+                'failed_patterns': getattr(parser, 'failed_patterns', []) if parser else []
             }
         }
 
