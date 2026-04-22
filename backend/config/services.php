@@ -35,6 +35,7 @@ return [
         ],
     ],
     'google' => [
+        'credentials' => env('GOOGLE_APPLICATION_CREDENTIALS'),
         'project_id' => env('GOOGLE_CLOUD_PROJECT_ID'),
         'processor_id' => env('GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID'),
         'location' => env('GOOGLE_CLOUD_LOCATION', 'us'), // Default to 'us' if not set

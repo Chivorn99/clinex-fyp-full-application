@@ -3,14 +3,123 @@ import json
 import re
 import argparse
 import concurrent.futures
+import mimetypes
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 import time
 import os
+import tempfile
 from time import sleep
 from google.cloud import documentai
 from google.oauth2 import service_account
 from google.api_core import exceptions
+
+
+def _read_env_value_from_dotenv(dotenv_path: str, key: str) -> Optional[str]:
+    """Fallback loader for .env values when process environment is not exported."""
+    if not os.path.exists(dotenv_path):
+        return None
+
+    try:
+        with open(dotenv_path, 'r', encoding='utf-8') as env_file:
+            for raw_line in env_file:
+                line = raw_line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                current_key, current_value = line.split('=', 1)
+                if current_key.strip() == key:
+                    return current_value.strip().strip('"').strip("'")
+    except Exception:
+        return None
+
+    return None
+
+
+def _get_google_config() -> Dict[str, str]:
+    base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    dotenv_path = os.path.join(base_path, '.env')
+
+    def get_config_value(key: str, default: Optional[str] = None) -> Optional[str]:
+        return os.getenv(key) or _read_env_value_from_dotenv(dotenv_path, key) or default
+
+    project_id = get_config_value('GOOGLE_CLOUD_PROJECT_ID')
+    location = get_config_value('GOOGLE_CLOUD_LOCATION', 'us')
+    processor_id = get_config_value('GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID')
+    credentials_config = get_config_value('GOOGLE_APPLICATION_CREDENTIALS')
+
+    if not project_id or not processor_id:
+        raise ValueError('Missing GOOGLE_CLOUD_PROJECT_ID or GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID in environment configuration.')
+
+    if not credentials_config:
+        raise ValueError('Missing GOOGLE_APPLICATION_CREDENTIALS in environment configuration.')
+
+    is_windows_absolute = re.match(r'^[A-Za-z]:[\\/]', credentials_config) is not None
+    is_unix_absolute = credentials_config.startswith('/')
+    credentials_path = credentials_config if (is_windows_absolute or is_unix_absolute) else os.path.join(base_path, 'storage', credentials_config)
+
+    return {
+        'project_id': project_id,
+        'location': location,
+        'processor_id': processor_id,
+        'credentials_path': credentials_path,
+    }
+
+
+def _infer_mime_type(file_path: str) -> str:
+    extension = Path(file_path).suffix.lower()
+    explicit_map = {
+        '.pdf': 'application/pdf',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.tif': 'image/tiff',
+        '.tiff': 'image/tiff',
+        '.bmp': 'image/bmp',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+    }
+    if extension in explicit_map:
+        return explicit_map[extension]
+
+    guessed, _ = mimetypes.guess_type(file_path)
+    return guessed or 'application/octet-stream'
+
+
+def _preprocess_image_for_ocr(file_path: str) -> bytes:
+    """
+    Optional preprocessing pipeline for scanned images.
+    Falls back to original bytes if Pillow is unavailable.
+    """
+    mime_type = _infer_mime_type(file_path)
+    if not mime_type.startswith('image/'):
+        with open(file_path, 'rb') as source:
+            return source.read()
+
+    try:
+        from PIL import Image, ImageFilter, ImageOps
+
+        with Image.open(file_path) as image:
+            # Normalize orientation and boost readability for OCR.
+            processed = ImageOps.exif_transpose(image)
+            processed = processed.convert('L')
+            processed = ImageOps.autocontrast(processed, cutoff=2)
+            processed = processed.filter(ImageFilter.SHARPEN)
+
+            output_format = 'JPEG' if mime_type == 'image/jpeg' else 'PNG'
+            with tempfile.NamedTemporaryFile(suffix='.' + output_format.lower(), delete=False) as temp_file:
+                temp_path = temp_file.name
+
+            try:
+                processed.save(temp_path, format=output_format, optimize=True)
+                with open(temp_path, 'rb') as temp_input:
+                    return temp_input.read()
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+    except Exception as preprocessing_error:
+        print(f'DEBUG: Image preprocessing unavailable or failed ({preprocessing_error}); using original image bytes', file=sys.stderr)
+        with open(file_path, 'rb') as source:
+            return source.read()
 
 class OptimizedLabReportParser:
     def __init__(self):
@@ -375,34 +484,38 @@ class OptimizedLabReportParser:
                 return field_map[key]
         return None
 
-def process_with_google_document_ai(pdf_path: str) -> str:
+def process_with_google_document_ai(file_path: str) -> str:
     retries = 3
     for attempt in range(retries):
         try:
-            project_id = 'clinex-application'
-            location = 'us'
-            processor_id = '7039da43cbe33faf'
-            base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            credentials_path = os.path.join(base_path, 'storage', 'app', 'google', 'clinex-application-ea5913277c08.json')
+            google_config = _get_google_config()
+            project_id = google_config['project_id']
+            location = google_config['location']
+            processor_id = google_config['processor_id']
+            credentials_path = google_config['credentials_path']
             
             print(f'DEBUG: Looking for credentials at: {credentials_path}', file=sys.stderr)
             if not os.path.exists(credentials_path):
                 raise FileNotFoundError(f'Credentials file not found: {credentials_path}')
             
             credentials = service_account.Credentials.from_service_account_file(credentials_path)
-            client = documentai.DocumentProcessorServiceClient(credentials=credentials)
+            client_options = {'api_endpoint': f'{location}-documentai.googleapis.com'} if location not in ['us', 'eu'] else None
+            client = documentai.DocumentProcessorServiceClient(credentials=credentials, client_options=client_options)
             name = client.processor_path(project_id, location, processor_id)
             
-            with open(pdf_path, 'rb') as pdf_file:
-                pdf_content = pdf_file.read()
+            mime_type = _infer_mime_type(file_path)
+            if mime_type == 'application/octet-stream':
+                raise ValueError(f'Unsupported file extension for OCR: {file_path}')
+
+            doc_content = _preprocess_image_for_ocr(file_path)
             
-            print(f'DEBUG: Processing {os.path.basename(pdf_path)} with Google Document AI...', file=sys.stderr)
+            print(f'DEBUG: Processing {os.path.basename(file_path)} as {mime_type} with Google Document AI...', file=sys.stderr)
             
             request = documentai.ProcessRequest(
                 name=name,
                 raw_document=documentai.RawDocument(
-                    content=pdf_content,
-                    mime_type='application/pdf'
+                    content=doc_content,
+                    mime_type=mime_type
                 ),
             )
             
@@ -422,7 +535,9 @@ def process_with_google_document_ai(pdf_path: str) -> str:
             raise
         except Exception as e:
             print(f'DEBUG: Google Document AI failed: {e}, falling back to local extraction', file=sys.stderr)
-            return extract_text_from_pdf_local(pdf_path)
+            if _infer_mime_type(file_path) == 'application/pdf':
+                return extract_text_from_pdf_local(file_path)
+            raise
 
 def extract_text_from_pdf_local(pdf_path: str) -> str:
     try:
@@ -481,7 +596,8 @@ def extract_text_from_pdf_local(pdf_path: str) -> str:
 
 def process_single_file(file_path: str) -> Dict[str, Any]:
     try:
-        if file_path.endswith('.pdf'):
+        mime_type = _infer_mime_type(file_path)
+        if mime_type in {'application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp'}:
             ocr_text = process_with_google_document_ai(file_path)
         else:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -545,10 +661,15 @@ def main():
             batch_dir = Path(args.batch)
             file_paths = []
             file_paths.extend([str(f) for f in batch_dir.glob('*.pdf')])
+            file_paths.extend([str(f) for f in batch_dir.glob('*.jpg')])
+            file_paths.extend([str(f) for f in batch_dir.glob('*.jpeg')])
+            file_paths.extend([str(f) for f in batch_dir.glob('*.png')])
+            file_paths.extend([str(f) for f in batch_dir.glob('*.tif')])
+            file_paths.extend([str(f) for f in batch_dir.glob('*.tiff')])
             file_paths.extend([str(f) for f in batch_dir.glob('*.txt')])
             print(f'DEBUG: Found {len(file_paths)} files to process', file=sys.stderr)
             if not file_paths:
-                raise Exception(f'No PDF or TXT files found in {batch_dir}')
+                raise Exception(f'No supported files (PDF/Image/TXT) found in {batch_dir}')
             results = process_batch_parallel(file_paths, args.workers)
         elif args.file_list:
             with open(args.file_list, 'r') as f:

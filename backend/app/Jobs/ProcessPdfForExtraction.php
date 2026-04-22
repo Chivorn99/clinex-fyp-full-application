@@ -39,7 +39,12 @@ class ProcessPdfForExtraction implements ShouldQueue
 
             // Step 3: Document AI processing
             $aiService = new DocumentAiService();
-            $document = $aiService->processDocument($this->pdfPath, 'a2439f686e4b0f79');
+            $processorId = config('services.google.processor_id');
+            if (empty($processorId)) {
+                throw new \Exception('GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID is not configured.');
+            }
+
+            $document = $aiService->processDocument($this->pdfPath, $processorId);
 
             if (!$document) {
                 throw new \Exception("Failed to process document with Document AI");

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Google\Cloud\DocumentAI\V1\Client\DocumentProcessorServiceClient;
+use Google\Cloud\DocumentAI\V1\Document;
 use Google\Cloud\DocumentAI\V1\ProcessRequest;
 use Google\Cloud\DocumentAI\V1\RawDocument;
 use Illuminate\Support\Facades\Log;
@@ -14,33 +15,56 @@ class DocumentAiService
     protected $processorName;
 
     /**
+     * Resolve credential path from config; supports relative path under storage.
+     */
+    private function resolveCredentialsPath(?string $configuredPath): ?string
+    {
+        if (!$configuredPath) {
+            return null;
+        }
+
+        $isWindowsAbsolute = preg_match('/^[A-Za-z]:[\\\\\/]/', $configuredPath) === 1;
+        $isUnixAbsolute = str_starts_with($configuredPath, '/');
+
+        if ($isWindowsAbsolute || $isUnixAbsolute) {
+            return $configuredPath;
+        }
+
+        return storage_path($configuredPath);
+    }
+
+    /**
      * Create a new service instance.
      */
     public function __construct()
     {
         try {
-            // --- THIS IS THE BULLETPROOF FIX FOR YOUR CREDENTIALS ---
-            // It directly points to the credentials file, bypassing .env lookup issues.
-            $credentialsPath = storage_path('app/google/clinex-application-ea5913277c08.json');
-
-            if (!file_exists($credentialsPath)) {
-                // If the file doesn't exist, this provides a clear, actionable error.
-                throw new \Exception("Google Cloud credentials file not found at: {$credentialsPath}");
-            }
-
-            $this->client = new DocumentProcessorServiceClient([
-                'credentials' => $credentialsPath
-            ]);
-            // --- END OF FIX ---
-
-            // Load configuration from config/services.php
             $projectId = config('services.google.project_id');
             $location = config('services.google.location');
             $processorId = config('services.google.processor_id');
+            $configuredCredentialsPath = config('services.google.credentials');
+            $credentialsPath = $this->resolveCredentialsPath($configuredCredentialsPath);
 
             if (!$projectId || !$location || !$processorId) {
                 throw new \Exception('Google Cloud project_id, location, and processor_id must be configured in config/services.php');
             }
+
+            if (!$credentialsPath || !file_exists($credentialsPath)) {
+                throw new \Exception("Google Cloud credentials file not found at: {$credentialsPath}");
+            }
+
+            $clientOptions = [
+                'credentials' => $credentialsPath,
+            ];
+
+            // Non-default regions require explicit regional endpoint.
+            if (!in_array($location, ['us', 'eu'], true)) {
+                $clientOptions['apiEndpoint'] = sprintf('%s-documentai.googleapis.com', $location);
+            }
+
+            $this->client = new DocumentProcessorServiceClient([
+                ...$clientOptions,
+            ]);
 
             // Construct the full processor name required by the API
             $this->processorName = $this->client->processorName($projectId, $location, $processorId);
@@ -77,12 +101,104 @@ class DocumentAiService
         }
     }
 
+    /**
+     * Process a document and return the raw Document AI response object.
+     */
+    public function processDocument(string $filePath, ?string $processorId = null): ?Document
+    {
+        try {
+            if (!file_exists($filePath)) {
+                throw new \Exception("Document file not found: {$filePath}");
+            }
+
+            $documentContent = file_get_contents($filePath);
+            if ($documentContent === false) {
+                throw new \Exception("Unable to read document file: {$filePath}");
+            }
+
+            $rawDocument = new RawDocument([
+                'content' => $documentContent,
+                'mime_type' => $this->detectMimeType($filePath),
+            ]);
+
+            $request = (new ProcessRequest())
+                ->setName($processorId ? $this->buildProcessorName($processorId) : $this->processorName)
+                ->setRawDocument($rawDocument);
+
+            $result = $this->client->processDocument($request);
+            return $result->getDocument();
+        } catch (\Exception $e) {
+            Log::error('Document AI processDocument failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Compatibility wrapper used by template zoning flow.
+     */
+    public function processDocumentEnhanced(
+        string $filePath,
+        string $processorType = 'ocr',
+        string $mimeType = 'application/pdf',
+        bool $includeTables = true,
+        bool $includeBlocks = true
+    ): ?array {
+        $document = $this->processDocument($filePath);
+        if (!$document) {
+            return null;
+        }
+
+        return [
+            'text' => $document->getText(),
+            'tables' => [],
+            'blocks' => [],
+            'processorType' => $processorType,
+            'mimeType' => $mimeType,
+            'includeTables' => $includeTables,
+            'includeBlocks' => $includeBlocks,
+        ];
+    }
+
+    private function buildProcessorName(string $processorId): string
+    {
+        $projectId = config('services.google.project_id');
+        $location = config('services.google.location');
+
+        if (!$projectId || !$location) {
+            throw new \Exception('Google project_id and location must be configured.');
+        }
+
+        return $this->client->processorName($projectId, $location, $processorId);
+    }
+
+    /**
+     * Detect supported mime type from file extension.
+     */
+    private function detectMimeType(string $filePath): string
+    {
+        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
+        return match ($extension) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'tif', 'tiff' => 'image/tiff',
+            'gif' => 'image/gif',
+            'bmp' => 'image/bmp',
+            'webp' => 'image/webp',
+            default => 'application/pdf',
+        };
+    }
+
     private function extractOCRText(string $filePath): ?string
     {
         $documentContent = file_get_contents($filePath);
+        if ($documentContent === false) {
+            return null;
+        }
+
         $rawDocument = new RawDocument([
             'content' => $documentContent,
-            'mime_type' => 'application/pdf',
+            'mime_type' => $this->detectMimeType($filePath),
         ]);
 
         $request = (new ProcessRequest())
