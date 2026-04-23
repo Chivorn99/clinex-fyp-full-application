@@ -166,7 +166,8 @@ class ProcessLabReportBatch implements ShouldQueue
 
                 $updateData = [
                     'processed_at' => now(),
-                    'processing_time' => $result['processingTime'] ?? null
+                    'processing_time' => $result['processingTime'] ?? null,
+                    'raw_ocr_text' => $result['rawText'] ?? null
                 ];
 
                 if ($isSuccess) {

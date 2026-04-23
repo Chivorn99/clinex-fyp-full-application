@@ -82,6 +82,7 @@ class ProcessSingleLabReport implements ShouldQueue
                 'processing_time' => $result['processingTime'] ?? null,
                 'status' => $isSuccess ? 'processed' : 'failed',
                 'extracted_data' => $isSuccess ? $result : null,
+                'raw_ocr_text' => $isSuccess ? ($result['rawText'] ?? null) : ($result['rawText'] ?? null),
                 'processing_error' => $isSuccess ? null : ($result['error'] ?? 'Unknown error'),
             ];
 

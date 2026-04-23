@@ -775,6 +775,7 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
         result['source_file'] = os.path.basename(file_path)
         result['success'] = True
         result['ocr_engine'] = ocr_engine
+        result['rawText'] = ocr_text
         if paddle_config.get('enabled'):
             result['confidence'] = confidence
         return result
@@ -783,6 +784,8 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
             'source_file': os.path.basename(file_path),
             'error': str(e),
             'success': False,
+            'rawText': ocr_text,
+            'ocr_engine': ocr_engine,
             'debug': {
                 'ocr_length': len(ocr_text) if ocr_text else 0,
                 'failed_patterns': getattr(parser, 'failed_patterns', []) if parser else []

@@ -34,6 +34,7 @@ class LabReport extends Model
         'verified_at',
         'processing_error',
         'extracted_data',
+        'raw_ocr_text',
     ];
 
     protected $casts = [
@@ -46,6 +47,7 @@ class LabReport extends Model
         'processing_time' => 'integer',
         'verified_at' => 'datetime',
         'extracted_data' => 'json',
+        'raw_ocr_text' => 'string',
     ];
 
     public function batch(): BelongsTo
