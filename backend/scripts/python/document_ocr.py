@@ -10,9 +10,6 @@ import time
 import os
 import tempfile
 from time import sleep
-from google.cloud import documentai
-from google.oauth2 import service_account
-from google.api_core import exceptions
 
 
 def _read_env_value_from_dotenv(dotenv_path: str, key: str) -> Optional[str]:
@@ -66,15 +63,14 @@ def _get_google_config() -> Dict[str, str]:
 
 
 def _get_paddle_config() -> Dict[str, Any]:
-    """Load PaddleOCR configuration from environment (reserved for future use)."""
+    """Load PaddleOCR configuration from environment."""
     base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     dotenv_path = os.path.join(base_path, '.env')
 
     def get_config_value(key: str, default: Optional[str] = None) -> Optional[str]:
         return os.getenv(key) or _read_env_value_from_dotenv(dotenv_path, key) or default
 
-    # Currently disabled - returning config only for future use
-    enabled = False
+    enabled = get_config_value('PADDLE_OCR_ENABLED', 'false').lower() in ('true', '1', 'yes')
     language = get_config_value('PADDLE_OCR_LANGUAGE', 'ch')
     confidence_threshold = float(get_config_value('PADDLE_OCR_CONFIDENCE_THRESHOLD', '0.85'))
 
@@ -143,11 +139,116 @@ def _preprocess_image_for_ocr(file_path: str) -> bytes:
             return source.read()
 
 
+def _flatten_paddle_lines(ocr_result: Any) -> List[Any]:
+    """Normalize paddleocr output shape across versions into a flat line list."""
+    if not ocr_result:
+        return []
 
-# NOTE: PaddleOCR integration has been disabled due to paddlepaddle dependency issues.
-# Google Document AI provides superior accuracy (98%+) and is the primary OCR engine.
-# PaddleOCR may be re-enabled in future if stable paddlepaddle wheel becomes available for Windows.
-# For now, using Google Document AI exclusively for all OCR processing.
+    if isinstance(ocr_result, dict):
+        rec_texts = ocr_result.get('rec_texts')
+        rec_scores = ocr_result.get('rec_scores')
+        if rec_texts and isinstance(rec_texts, list):
+            flattened: List[Any] = []
+            for idx, text in enumerate(rec_texts):
+                score = 0.0
+                if isinstance(rec_scores, list) and idx < len(rec_scores):
+                    score = float(rec_scores[idx])
+                flattened.append((None, (str(text), score)))
+            return flattened
+
+    if isinstance(ocr_result, list):
+        if ocr_result and isinstance(ocr_result[0], list) and ocr_result[0] and isinstance(ocr_result[0][0], (list, tuple)):
+            return ocr_result[0]
+        return ocr_result
+
+    return []
+
+
+def _parse_paddle_result(ocr_result: Any) -> tuple[str, float]:
+    """Parse PaddleOCR result into text and average confidence."""
+    text_lines: List[str] = []
+    confidences: List[float] = []
+
+    for line in _flatten_paddle_lines(ocr_result):
+        if not isinstance(line, (list, tuple)) or len(line) < 2:
+            continue
+
+        payload = line[1]
+        if isinstance(payload, (list, tuple)) and len(payload) >= 2:
+            text = str(payload[0]).strip()
+            try:
+                confidence = float(payload[1])
+            except (TypeError, ValueError):
+                confidence = 0.0
+        else:
+            text = str(payload).strip()
+            confidence = 0.0
+
+        if text:
+            text_lines.append(text)
+            confidences.append(confidence)
+
+    extracted_text = '\n'.join(text_lines)
+    average_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+    return extracted_text, average_confidence
+
+
+def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
+    """Extract text from document using PaddleOCR with confidence scoring."""
+    try:
+        from paddleocr import PaddleOCR
+    except ImportError as import_error:
+        raise ImportError('paddleocr/paddlepaddle not installed in current environment') from import_error
+
+    paddle_config = _get_paddle_config()
+    mime_type = _infer_mime_type(file_path)
+    ocr = PaddleOCR(lang=paddle_config['language'])
+
+    if mime_type == 'application/pdf':
+        try:
+            import fitz
+        except ImportError as import_error:
+            raise Exception('PyMuPDF is required for PDF + PaddleOCR flow') from import_error
+
+        doc = fitz.open(file_path)
+        all_text: List[str] = []
+        page_confidences: List[float] = []
+
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            temp_img_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
+            pix.save(temp_img_path)
+
+            try:
+                result = ocr.ocr(temp_img_path, cls=True)
+                page_text, page_confidence = _parse_paddle_result(result)
+                if page_text:
+                    all_text.append(page_text)
+                page_confidences.append(page_confidence)
+                print(f'DEBUG: PaddleOCR processed page {page_num + 1} with confidence {page_confidence:.3f}', file=sys.stderr)
+            finally:
+                if os.path.exists(temp_img_path):
+                    os.remove(temp_img_path)
+
+        doc.close()
+        avg_confidence = sum(page_confidences) / len(page_confidences) if page_confidences else 0.0
+        joined_text = '\n'.join(all_text)
+        print(f'DEBUG: PaddleOCR extracted {len(joined_text)} characters with avg confidence {avg_confidence:.3f}', file=sys.stderr)
+        return {
+            'text': joined_text,
+            'confidence': avg_confidence,
+            'page_confidences': page_confidences,
+        }
+
+    result = ocr.ocr(file_path, cls=True)
+    text, confidence = _parse_paddle_result(result)
+    print(f'DEBUG: PaddleOCR extracted {len(text)} characters with confidence {confidence:.3f}', file=sys.stderr)
+    return {
+        'text': text,
+        'confidence': confidence,
+        'page_confidences': [confidence],
+    }
 
 
 class OptimizedLabReportParser:
@@ -514,6 +615,13 @@ class OptimizedLabReportParser:
         return None
 
 def process_with_google_document_ai(file_path: str) -> str:
+    try:
+        from google.cloud import documentai
+        from google.oauth2 import service_account
+        from google.api_core import exceptions
+    except ImportError as import_error:
+        raise RuntimeError(f'Google Document AI dependencies unavailable: {import_error}') from import_error
+
     retries = 3
     for attempt in range(retries):
         try:
@@ -624,19 +732,40 @@ def extract_text_from_pdf_local(pdf_path: str) -> str:
         raise Exception(f'All PDF extraction methods failed. Last error: {str(e)}')
 
 def process_single_file(file_path: str) -> Dict[str, Any]:
+    paddle_config = {}
     ocr_text = None
-    ocr_engine = 'google'
+    confidence = 0.0
+    ocr_engine = 'unknown'
     parser = None
     
     try:
         mime_type = _infer_mime_type(file_path)
+        paddle_config = _get_paddle_config()
         
         if mime_type in {'application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp'}:
-            # Use Google Document AI for all image and PDF documents
-            ocr_text = process_with_google_document_ai(file_path)
-            ocr_engine = 'google'
+            if paddle_config['enabled']:
+                try:
+                    paddle_result = process_with_paddle_ocr(file_path)
+                    ocr_text = paddle_result['text']
+                    confidence = paddle_result['confidence']
+                    ocr_engine = 'paddle'
+
+                    if confidence < paddle_config['confidence_threshold']:
+                        print(f'DEBUG: PaddleOCR confidence {confidence:.3f} below threshold {paddle_config["confidence_threshold"]}, falling back to Google Document AI', file=sys.stderr)
+                        try:
+                            ocr_text = process_with_google_document_ai(file_path)
+                            ocr_engine = 'google (fallback from paddle)'
+                        except Exception as google_fallback_error:
+                            print(f'DEBUG: Google fallback unavailable ({google_fallback_error}); keeping low-confidence Paddle output', file=sys.stderr)
+                            ocr_engine = 'paddle (low-confidence; google unavailable)'
+                except Exception as paddle_error:
+                    print(f'DEBUG: PaddleOCR failed ({paddle_error}), falling back to Google Document AI', file=sys.stderr)
+                    ocr_text = process_with_google_document_ai(file_path)
+                    ocr_engine = 'google (fallback from paddle)'
+            else:
+                ocr_text = process_with_google_document_ai(file_path)
+                ocr_engine = 'google'
         else:
-            # Assume it's a text file
             with open(file_path, 'r', encoding='utf-8') as f:
                 ocr_text = f.read()
             ocr_engine = 'text'
@@ -646,6 +775,8 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
         result['source_file'] = os.path.basename(file_path)
         result['success'] = True
         result['ocr_engine'] = ocr_engine
+        if paddle_config.get('enabled'):
+            result['confidence'] = confidence
         return result
     except Exception as e:
         return {
@@ -661,7 +792,7 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
 def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
     if max_workers is None:
         max_workers = min(len(file_paths), 3)
-    print(f'DEBUG: Processing {len(file_paths)} files with {max_workers} workers (Google Document AI)', file=sys.stderr)
+    print(f'DEBUG: Processing {len(file_paths)} files with {max_workers} workers (PaddleOCR + Google fallback)', file=sys.stderr)
     start_time = time.time()
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -683,7 +814,7 @@ def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = N
     return results
 
 def main():
-    parser = argparse.ArgumentParser(description='Parse lab report OCR text with Google Document AI')
+    parser = argparse.ArgumentParser(description='Parse lab report OCR text with PaddleOCR + Google Document AI fallback')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--file', help='Single file to process')
     group.add_argument('--batch', help='Directory containing OCR files')

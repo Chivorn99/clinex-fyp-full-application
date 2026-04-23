@@ -1,3 +1,14 @@
 PADDLEOCR_IMPLEMENTATION.md
 IMPLEMENTATION_COMPLETE.md
 OCR_SYSTEM_ARCHITECTURE.md
+
+# Python virtual environments
+backend/scripts/python/.venv/
+backend/scripts/python/.venv312/
+
+# Python cache/artifacts
+**/__pycache__/
+*.pyc
+
+# OCR runtime outputs
+backend/scripts/python/extracted_text.txt
