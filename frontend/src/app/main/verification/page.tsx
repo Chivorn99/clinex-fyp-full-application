@@ -1,8 +1,8 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import {ArrowLeft,FileText,User,Eye,Maximize,Minimize,CheckCircle,Clock as ClockIcon,Plus,Trash2,AlertTriangle} from 'lucide-react'
+import {ArrowLeft,FileText,User,Eye,Maximize,Minimize,CheckCircle,Clock as ClockIcon,Plus,Trash2} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
 
@@ -34,6 +34,82 @@ interface TestResult {
     flag: 'high' | 'low' | 'critical' | 'normal' | null
 }
 
+interface BackendTestResult {
+    category?: string
+    testName?: string
+    result?: string
+    unit?: string
+    referenceRange?: string
+    flag?: string | null
+}
+
+interface BackendLabInfo {
+    labId?: string
+    requestedBy?: string
+    requestedDate?: string
+    collectedDate?: string
+    analysisDate?: string
+    validatedBy?: string
+}
+
+interface BackendExtractedData {
+    rawText?: string
+    patientInfo?: Partial<PatientInfo>
+    labInfo?: BackendLabInfo
+    testResults?: BackendTestResult[]
+}
+
+interface BackendLabReport {
+    id: number | string
+    status?: string
+    original_filename?: string
+    raw_ocr_text?: string | null
+    uploader?: BackendUploader | null
+    batch?: {
+        id: number
+        name: string
+        status: string
+    } | null
+}
+
+interface BackendUploader {
+    name?: string
+}
+
+interface ApiError {
+    response?: {
+        status?: number
+        data?: {
+            message?: string
+            errors?: Record<string, string[]>
+        }
+    }
+    status?: number
+    message?: string
+}
+
+const isApiError = (err: unknown): err is ApiError => typeof err === 'object' && err !== null
+
+const mapBackendFlag = (flag: string | null): TestResult['flag'] => {
+    if (!flag) return null
+    switch (flag.toUpperCase()) {
+        case 'H': return 'high'
+        case 'L': return 'low'
+        case 'C': return 'critical'
+        default: return 'normal'
+    }
+}
+
+const mapFrontendFlag = (flag: TestResult['flag']): string | null => {
+    if (!flag || flag === 'normal') return null
+    switch (flag) {
+        case 'high': return 'H'
+        case 'low': return 'L'
+        case 'critical': return 'C'
+        default: return null
+    }
+}
+
 interface ProcessedReport {
     id: string
     fileName: string
@@ -43,9 +119,9 @@ interface ProcessedReport {
     patientInfo: PatientInfo
     labInfo: LabInfo
     testResults: TestResult[]
-    extracted_data?: any
+    extracted_data?: BackendExtractedData
     original_filename?: string
-    uploader?: any
+    uploader?: BackendUploader | null
     rawOcrText?: string
 }
 
@@ -62,14 +138,10 @@ export default function VerificationPage() {
     const reportId = searchParams.get('reportId')
     const { user } = useAuth()
 
-    const [isProcessing, setIsProcessing] = useState(true)
     const [reports, setReports] = useState<ProcessedReport[]>([])
     const [selectedReport, setSelectedReport] = useState<ProcessedReport | null>(null)
-    const [editingField, setEditingField] = useState<string | null>(null)
     const [isPreviewExpanded, setIsPreviewExpanded] = useState(false)
-    const [processingAnimation, setProcessingAnimation] = useState(true)
     const [batchInfo, setBatchInfo] = useState<BatchInfo | null>(null)
-    const [error, setError] = useState('')
     const [pdfDataUrl, setPdfDataUrl] = useState<string>('')
     const [pdfLoading, setPdfLoading] = useState(false)
     const [pdfError, setPdfError] = useState('')
@@ -107,17 +179,7 @@ export default function VerificationPage() {
         }, {} as Record<string, TestResult[]>)
     }, [selectedReport])
 
-    useEffect(() => {
-        if (reportId) {
-            fetchSingleReport(reportId)
-        } else if (batchId) {
-            fetchBatchReports()
-        } else {
-            fetchAllReports()
-        }
-    }, [batchId, reportId])
-
-    const fetchPdfData = async (reportId: string) => {
+    const fetchPdfData = useCallback(async (reportId: string) => {
         try {
             setPdfLoading(true)
             setPdfError('')
@@ -133,15 +195,15 @@ export default function VerificationPage() {
             } else {
                 throw new Error('Invalid PDF response structure')
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('💥 Failed to fetch PDF data:', err)
             let errorMessage = 'Failed to load PDF preview'
 
-            if (err.status === 404) {
+            if (isApiError(err) && err.status === 404) {
                 errorMessage = 'PDF file not found'
-            } else if (err.status === 401) {
+            } else if (isApiError(err) && err.status === 401) {
                 errorMessage = 'Authentication failed. Please log in again.'
-            } else if (err.message) {
+            } else if (isApiError(err) && err.message) {
                 errorMessage = err.message
             }
 
@@ -149,21 +211,87 @@ export default function VerificationPage() {
         } finally {
             setPdfLoading(false)
         }
-    }
+    }, [])
 
-    const fetchSingleReport = async (id: string) => {
+    const transformLabReportToProcessedReport = useCallback((labReport: BackendLabReport, extractedData?: BackendExtractedData): ProcessedReport => {
+        console.log('🔄 Transforming lab report:', labReport.id)
+
+        const rawOcrText = labReport.raw_ocr_text || extractedData?.rawText || ''
+
+        const transformed: ProcessedReport = {
+            id: labReport.id.toString(),
+            fileName: labReport.original_filename || `Report ${labReport.id}`,
+            status: labReport.status === 'verified' ? 'verified' as const :
+                    labReport.status === 'processed' ? 'completed' as const : 'completed' as const,
+            processingProgress: 100,
+            pdfUrl: '',
+            patientInfo: {
+                name: extractedData?.patientInfo?.name || '',
+                patientId: extractedData?.patientInfo?.patientId || '',
+                age: extractedData?.patientInfo?.age || '',
+                gender: extractedData?.patientInfo?.gender || '',
+                phone: extractedData?.patientInfo?.phone || ''
+            },
+            labInfo: {
+                labId: extractedData?.labInfo?.labId || '',
+                requestedBy: extractedData?.labInfo?.requestedBy || '',
+                requestedDate: extractedData?.labInfo?.requestedDate || '',
+                collectedDate: extractedData?.labInfo?.collectedDate || '',
+                analysisDate: extractedData?.labInfo?.analysisDate || '',
+                validatedBy: extractedData?.labInfo?.validatedBy || ''
+            },
+            testResults: (extractedData?.testResults || []).map((test: BackendTestResult, index: number) => ({
+                id: `${labReport.id}_${index}`,
+                category: test.category || '',
+                testName: test.testName || '',
+                result: test.result || '',
+                unit: test.unit || '',
+                referenceRange: test.referenceRange || '',
+                flag: mapBackendFlag(test.flag ?? null)
+            })),
+            extracted_data: extractedData,
+            original_filename: labReport.original_filename,
+            uploader: labReport.uploader,
+            rawOcrText
+        }
+
+        console.log('✅ Transformed report:', {
+            id: transformed.id,
+            fileName: transformed.fileName,
+            testResultsCount: transformed.testResults.length
+        })
+
+        return transformed
+    }, [])
+
+    const handleFetchError = useCallback((err: unknown, context: string) => {
+        let errorMessage = `Failed to load ${context}`
+
+        if (isApiError(err) && err.response?.status === 404) {
+            errorMessage = `${context} not found or has no reports ready for verification`
+        } else if (isApiError(err) && err.response?.status === 401) {
+            errorMessage = 'Authentication failed. Please log in again.'
+        } else if (isApiError(err) && err.response?.status === 403) {
+            errorMessage = 'You do not have permission to access this resource'
+        } else if (isApiError(err) && err.response?.data?.message) {
+            errorMessage = err.response.data.message
+        } else if (isApiError(err) && err.message) {
+            errorMessage = err.message
+        }
+
+        console.error(errorMessage)
+    }, [])
+
+    const fetchSingleReport = useCallback(async (id: string) => {
         try {
-            setIsProcessing(true)
-            setError('')
-
             console.log('🚀 Fetching single report:', id)
 
             const response = await apiClient.get(`/lab-reports/${id}`)
             console.log('✅ Single report API Response:', response)
 
             if (response.success && response.data?.lab_report) {
-                const labReport = response.data.lab_report
-                const extractedData = response.data.extracted_data
+                const labReport: BackendLabReport = response.data.lab_report
+                const extractedData: BackendExtractedData | undefined = response.data.extracted_data
 
                 console.log('📊 Lab Report Data:', labReport)
                 console.log('📋 Extracted Data:', extractedData)
@@ -188,20 +316,14 @@ export default function VerificationPage() {
             } else {
                 throw new Error('Invalid response structure')
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('💥 Failed to fetch single report:', err)
             handleFetchError(err, `report ${id}`)
-        } finally {
-            setIsProcessing(false)
-            setProcessingAnimation(false)
         }
-    }
+    }, [fetchPdfData, handleFetchError, transformLabReportToProcessedReport])
 
-    const fetchBatchReports = async () => {
+    const fetchBatchReports = useCallback(async () => {
         try {
-            setIsProcessing(true)
-            setError('')
-
             console.log('🚀 Fetching reports for batch:', batchId)
 
             const response = await apiClient.get(`/batches/${batchId}/reports-for-verification`)
@@ -215,8 +337,8 @@ export default function VerificationPage() {
 
             setBatchInfo(apiResponse.batch)
 
-            const reportsData = apiResponse.reports_to_verify.data
-            const transformedReports = reportsData.map((report: any) =>
+            const reportsData: Array<BackendLabReport & { extracted_data?: BackendExtractedData }> = apiResponse.reports_to_verify.data
+            const transformedReports = reportsData.map((report) =>
                 transformLabReportToProcessedReport(report, report.extracted_data)
             )
 
@@ -233,103 +355,70 @@ export default function VerificationPage() {
             }
 
             console.log('✅ Batch reports loaded successfully')
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('💥 Failed to fetch batch reports:', err)
             handleFetchError(err, `batch ${batchId}`)
-        } finally {
-            setIsProcessing(false)
-            setProcessingAnimation(false)
         }
-    }
+    }, [batchId, fetchPdfData, handleFetchError, transformLabReportToProcessedReport, reportId])
 
-    const transformLabReportToProcessedReport = (labReport: any, extractedData: any): ProcessedReport => {
-        console.log('🔄 Transforming lab report:', labReport.id)
+    const fetchAllReports = useCallback(() => {
+        const mockReports: ProcessedReport[] = [
+            {
+                id: 'rpt_001',
+                fileName: 'lab_report_john_doe.pdf',
+                status: 'completed',
+                processingProgress: 100,
+                pdfUrl: '', // Placeholder for mock data
+                patientInfo: {
+                    name: "សាន សេងយាន",
+                    patientId: "PT001871",
+                    age: "72 Y",
+                    gender: "Female",
+                    phone: "069366717"
+                },
+                labInfo: {
+                    labId: "LT001235",
+                    requestedBy: "Dr. CHHORN Sophy",
+                    requestedDate: "17/03/2024 12:57",
+                    collectedDate: "17/03/2024 13:36",
+                    analysisDate: "17/03/2024 13:36",
+                    validatedBy: "SREYNEANG - B.Sc"
+                },
+                testResults: [
+                    {
+                        id: '1',
+                        category: "BIOCHEMISTRY",
+                        testName: "Glucose",
+                        result: "6.5",
+                        unit: "mmol/L",
+                        referenceRange: "(3.9-6.1)",
+                        flag: "high"
+                    }
+                ]
+            }
+        ]
 
-        const rawOcrText = labReport.raw_ocr_text || extractedData?.rawText || ''
+        setTimeout(() => {
+            setReports(mockReports)
+            const firstCompleted = mockReports.find(r => r.status === 'completed')
+            if (firstCompleted) {
+                setSelectedReport(firstCompleted)
+                // Skip PDF fetching for mock data
+                setPdfDataUrl('')
+                setPdfError('PDF preview not available for mock data')
+            }
+        }, 3000)
+    }, [])
 
-        const transformed = {
-            id: labReport.id.toString(),
-            fileName: labReport.original_filename || `Report ${labReport.id}`,
-            status: labReport.status === 'verified' ? 'verified' as const : 
-                    labReport.status === 'processed' ? 'completed' as const : 'completed' as const,
-            processingProgress: 100,
-            pdfUrl: '', 
-            patientInfo: {
-                name: extractedData?.patientInfo?.name || '',
-                patientId: extractedData?.patientInfo?.patientId || '',
-                age: extractedData?.patientInfo?.age || '',
-                gender: extractedData?.patientInfo?.gender || '',
-                phone: extractedData?.patientInfo?.phone || ''
-            },
-            labInfo: {
-                labId: extractedData?.labInfo?.labId || '',
-                requestedBy: extractedData?.labInfo?.requestedBy || '',
-                requestedDate: extractedData?.labInfo?.requestedDate || '',
-                collectedDate: extractedData?.labInfo?.collectedDate || '',
-                analysisDate: extractedData?.labInfo?.analysisDate || '',
-                validatedBy: extractedData?.labInfo?.validatedBy || ''
-            },
-            testResults: (extractedData?.testResults || []).map((test: any, index: number) => ({
-                id: `${labReport.id}_${index}`,
-                category: test.category || '',
-                testName: test.testName || '',
-                result: test.result || '',
-                unit: test.unit || '',
-                referenceRange: test.referenceRange || '',
-                flag: mapBackendFlag(test.flag)
-            })),
-            extracted_data: extractedData,
-            original_filename: labReport.original_filename,
-            uploader: labReport.uploader,
-            rawOcrText
+    useEffect(() => {
+        if (reportId) {
+            fetchSingleReport(reportId)
+        } else if (batchId) {
+            fetchBatchReports()
+        } else {
+            fetchAllReports()
         }
-
-        console.log('✅ Transformed report:', {
-            id: transformed.id,
-            fileName: transformed.fileName,
-            testResultsCount: transformed.testResults.length
-        })
-
-        return transformed
-    }
-
-    const mapBackendFlag = (flag: string | null): TestResult['flag'] => {
-        if (!flag) return null
-        switch (flag.toUpperCase()) {
-            case 'H': return 'high'
-            case 'L': return 'low'
-            case 'C': return 'critical'
-            default: return 'normal'
-        }
-    }
-
-    const mapFrontendFlag = (flag: TestResult['flag']): string | null => {
-        if (!flag || flag === 'normal') return null
-        switch (flag) {
-            case 'high': return 'H'
-            case 'low': return 'L'
-            case 'critical': return 'C'
-            default: return null
-        }
-    }
-
-    const handleFetchError = (err: any, context: string) => {
-        let errorMessage = `Failed to load ${context}`
-
-        if (err.response?.status === 404) {
-            errorMessage = `${context} not found or has no reports ready for verification`
-        } else if (err.response?.status === 401) {
-            errorMessage = 'Authentication failed. Please log in again.'
-        } else if (err.response?.status === 403) {
-            errorMessage = 'You do not have permission to access this resource'
-        } else if (err.response?.data?.message) {
-            errorMessage = err.response.data.message
-        } else if (err.message) {
-            errorMessage = err.message
-        }
-
-        setError(errorMessage)
-    }
+    }, [batchId, reportId, fetchAllReports, fetchBatchReports, fetchSingleReport])
 
     // Helper functions for updating data
     const updatePatientInfo = (field: keyof PatientInfo, value: string) => {
@@ -516,30 +605,29 @@ export default function VerificationPage() {
             } else {
                 throw new Error(response.message || 'Verification failed')
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('💥 Verification submission failed:', err)
 
             let errorMessage = 'Failed to verify report'
 
-            if (err.response?.status === 422) {
+            if (isApiError(err) && err.response?.status === 422) {
                 const validationErrors = err.response.data?.errors
                 if (validationErrors) {
                     errorMessage = 'Validation failed: ' + Object.values(validationErrors).flat().join(', ')
                 } else {
                     errorMessage = err.response.data?.message || 'Validation failed'
                 }
-            } else if (err.response?.status === 401) {
+            } else if (isApiError(err) && err.response?.status === 401) {
                 errorMessage = 'Authentication failed. Please log in again.'
-            } else if (err.response?.status === 404) {
+            } else if (isApiError(err) && err.response?.status === 404) {
                 errorMessage = 'Report not found'
-            } else if (err.response?.data?.message) {
+            } else if (isApiError(err) && err.response?.data?.message) {
                 errorMessage = err.response.data.message
-            } else if (err.message) {
+            } else if (isApiError(err) && err.message) {
                 errorMessage = err.message
             }
 
             alert(`Verification Error: ${errorMessage}`)
-            setError(errorMessage)
         } finally {
             setIsSubmitting(false)
         }
@@ -558,7 +646,7 @@ export default function VerificationPage() {
             } else {
                 router.push('/main/reports?status=processed')
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('💥 Failed to save for later:', err)
             alert('Failed to save report for later verification')
         } finally {
@@ -589,57 +677,6 @@ export default function VerificationPage() {
         } catch (error) {
             console.error('Failed to copy raw OCR text:', error)
         }
-    }
-
-    const fetchAllReports = () => {
-        const mockReports: ProcessedReport[] = [
-            {
-                id: 'rpt_001',
-                fileName: 'lab_report_john_doe.pdf',
-                status: 'completed',
-                processingProgress: 100,
-                pdfUrl: '', // Placeholder for mock data
-                patientInfo: {
-                    name: "សាន សេងយាន",
-                    patientId: "PT001871",
-                    age: "72 Y",
-                    gender: "Female",
-                    phone: "069366717"
-                },
-                labInfo: {
-                    labId: "LT001235",
-                    requestedBy: "Dr. CHHORN Sophy",
-                    requestedDate: "17/03/2024 12:57",
-                    collectedDate: "17/03/2024 13:36",
-                    analysisDate: "17/03/2024 13:36",
-                    validatedBy: "SREYNEANG - B.Sc"
-                },
-                testResults: [
-                    {
-                        id: '1',
-                        category: "BIOCHEMISTRY",
-                        testName: "Glucose",
-                        result: "6.5",
-                        unit: "mmol/L",
-                        referenceRange: "(3.9-6.1)",
-                        flag: "high"
-                    }
-                ]
-            }
-        ]
-
-        setTimeout(() => {
-            setProcessingAnimation(false)
-            setReports(mockReports)
-            setIsProcessing(false)
-            const firstCompleted = mockReports.find(r => r.status === 'completed')
-            if (firstCompleted) {
-                setSelectedReport(firstCompleted)
-                // Skip PDF fetching for mock data
-                setPdfDataUrl('')
-                setPdfError('PDF preview not available for mock data')
-            }
-        }, 3000)
     }
 
     return (
@@ -1073,9 +1110,9 @@ export default function VerificationPage() {
                                                 ></div>
                                             </div>
                                         )}
-                                        {report.uploader && (
+                                        {report.uploader?.name && (
                                             <div className="mt-2 text-xs text-gray-500">
-                                                Uploaded by: {report.uploader.name}
+                                                Uploaded by: {report.uploader?.name}
                                             </div>
                                         )}
                                     </div>
