@@ -46,6 +46,7 @@ interface ProcessedReport {
     extracted_data?: any
     original_filename?: string
     uploader?: any
+    rawOcrText?: string
 }
 
 interface BatchInfo {
@@ -244,6 +245,8 @@ export default function VerificationPage() {
     const transformLabReportToProcessedReport = (labReport: any, extractedData: any): ProcessedReport => {
         console.log('🔄 Transforming lab report:', labReport.id)
 
+        const rawOcrText = labReport.raw_ocr_text || extractedData?.rawText || ''
+
         const transformed = {
             id: labReport.id.toString(),
             fileName: labReport.original_filename || `Report ${labReport.id}`,
@@ -277,7 +280,8 @@ export default function VerificationPage() {
             })),
             extracted_data: extractedData,
             original_filename: labReport.original_filename,
-            uploader: labReport.uploader
+            uploader: labReport.uploader,
+            rawOcrText
         }
 
         console.log('✅ Transformed report:', {
@@ -577,6 +581,16 @@ export default function VerificationPage() {
         </select>
     )
 
+    const copyRawText = async () => {
+        if (!selectedReport?.rawOcrText) return
+
+        try {
+            await navigator.clipboard.writeText(selectedReport.rawOcrText)
+        } catch (error) {
+            console.error('Failed to copy raw OCR text:', error)
+        }
+    }
+
     const fetchAllReports = () => {
         const mockReports: ProcessedReport[] = [
             {
@@ -848,6 +862,40 @@ export default function VerificationPage() {
                                                 />
                                             </div>
                                         ))}
+                                    </div>
+                                </div>
+
+                                {/* Raw OCR Text */}
+                                <div className="bg-white shadow rounded-lg">
+                                    <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+                                        <div>
+                                            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                                                <FileText className="h-5 w-5 mr-2 text-purple-600" />
+                                                Extracted Raw Text
+                                            </h3>
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                Stored OCR text for audit, review, and re-parsing.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={copyRawText}
+                                            disabled={!selectedReport.rawOcrText}
+                                            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            Copy Text
+                                        </button>
+                                    </div>
+                                    <div className="p-6">
+                                        {selectedReport.rawOcrText ? (
+                                            <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-gray-800 bg-gray-50 border border-gray-200 rounded-md p-4 font-mono">
+                                                {selectedReport.rawOcrText}
+                                            </pre>
+                                        ) : (
+                                            <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                                                Raw OCR text is not available for this report.
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
