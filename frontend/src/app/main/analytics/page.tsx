@@ -1,8 +1,36 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { BarChart3, TrendingUp, Users, FileText, Calendar, Activity,PieChart,Download,RefreshCw,Filter,ChevronDown,ChevronUp,CheckCircle,Clock,AlertTriangle,Target,Zap,Award,Eye} from 'lucide-react'
+import { TrendingUp, Users, FileText, Activity, PieChart, RefreshCw, CheckCircle, Clock, AlertTriangle, Target, Zap, Award } from 'lucide-react'
 import { apiClient } from '@/lib/api'
+
+interface ApiListResponse<T> {
+    data?: T[]
+}
+
+interface PatientRecord {
+    created_at?: string
+}
+
+interface UserRef {
+    id: number
+    name: string
+}
+
+interface ExtractedTest {
+    category?: string
+    test_name?: string
+}
+
+interface ReportRecord {
+    status?: string
+    created_at?: string
+    extracted_data?: ExtractedTest[] | null
+    uploader?: UserRef | null
+    verifier?: UserRef | null
+}
+
+type TrendMetric = 'reports' | 'patients' | 'verified'
 
 // Interfaces
 interface AnalyticsData {
@@ -57,64 +85,169 @@ export default function AnalyticsPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
     const [timeRange, setTimeRange] = useState('30') // days
-    const [selectedMetric, setSelectedMetric] = useState('reports')
-    const [showDetails, setShowDetails] = useState<string | null>(null)
+    const [selectedMetric, setSelectedMetric] = useState<TrendMetric>('reports')
 
-    useEffect(() => {
-        fetchAnalyticsData()
-    }, [timeRange])
+    const generateDailyTrends = useCallback((reports: ReportRecord[], patients: PatientRecord[], days: number) => {
+        const trends: AnalyticsData['trends']['daily'] = []
+        const now = new Date()
 
-    const fetchAnalyticsData = async () => {
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date(now)
+            date.setDate(date.getDate() - i)
+            const dateStr = date.toISOString().split('T')[0]
+
+            const dayReports = reports.filter(r => r.created_at?.startsWith(dateStr))
+            const dayPatients = patients.filter(p => p.created_at?.startsWith(dateStr))
+            const dayVerified = dayReports.filter(r => r.status === 'verified')
+
+            trends.push({
+                date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                reports: dayReports.length,
+                patients: dayPatients.length,
+                verified: dayVerified.length
+            })
+        }
+
+        return trends
+    }, [])
+
+    const generateMonthlyTrends = useCallback((reports: ReportRecord[], patients: PatientRecord[]) => {
+        const trends: AnalyticsData['trends']['monthly'] = []
+        const now = new Date()
+
+        for (let i = 5; i >= 0; i--) {
+            const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+            const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+
+            const monthReports = reports.filter(r => r.created_at?.startsWith(monthStr))
+            const monthPatients = patients.filter(p => p.created_at?.startsWith(monthStr))
+            const monthVerified = monthReports.filter(r => r.status === 'verified')
+
+            trends.push({
+                month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+                reports: monthReports.length,
+                patients: monthPatients.length,
+                verified: monthVerified.length
+            })
+        }
+
+        return trends
+    }, [])
+
+    const processTestCategories = useCallback((reports: ReportRecord[]) => {
+        const categories: Record<string, number> = {}
+        let totalTests = 0
+
+        reports.forEach(report => {
+            if (Array.isArray(report.extracted_data)) {
+                report.extracted_data.forEach((test: ExtractedTest) => {
+                    const category = test.category || 'UNCATEGORIZED'
+                    categories[category] = (categories[category] || 0) + 1
+                    totalTests++
+                })
+            }
+        })
+
+        return Object.entries(categories).map(([category, count]) => ({
+            category,
+            count,
+            percentage: totalTests > 0 ? Math.round((count / totalTests) * 100) : 0
+        })).sort((a, b) => b.count - a.count)
+    }, [])
+
+    const getTopTests = useCallback((reports: ReportRecord[]) => {
+        const tests: Record<string, { count: number; category: string }> = {}
+
+        reports.forEach(report => {
+            if (Array.isArray(report.extracted_data)) {
+                report.extracted_data.forEach((test: ExtractedTest) => {
+                    const testName = test.test_name || 'Unknown Test'
+                    const category = test.category || 'UNCATEGORIZED'
+
+                    if (!tests[testName]) {
+                        tests[testName] = { count: 0, category }
+                    }
+                    tests[testName].count++
+                })
+            }
+        })
+
+        return Object.entries(tests)
+            .map(([testName, data]) => ({
+                testName,
+                count: data.count,
+                category: data.category
+            }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10)
+    }, [])
+
+    const processUserActivity = useCallback((reports: ReportRecord[]) => {
+        const users: Record<number, { name: string; uploads: number; verifications: number }> = {}
+
+        reports.forEach(report => {
+            if (report.uploader) {
+                const userId = report.uploader.id
+                if (!users[userId]) {
+                    users[userId] = { name: report.uploader.name, uploads: 0, verifications: 0 }
+                }
+                users[userId].uploads++
+            }
+
+            if (report.verifier) {
+                const userId = report.verifier.id
+                if (!users[userId]) {
+                    users[userId] = { name: report.verifier.name, uploads: 0, verifications: 0 }
+                }
+                users[userId].verifications++
+            }
+        })
+
+        return Object.entries(users).map(([userId, data]) => ({
+            userId: parseInt(userId),
+            userName: data.name,
+            uploadsCount: data.uploads,
+            verificationsCount: data.verifications
+        })).sort((a, b) => (b.uploadsCount + b.verificationsCount) - (a.uploadsCount + a.verificationsCount))
+    }, [])
+
+    const getMaxValue = useCallback((data: AnalyticsData['trends']['daily'], key: TrendMetric) => {
+        return Math.max(...data.map(item => item[key]), 0)
+    }, [])
+
+    const fetchAnalyticsData = useCallback(async () => {
         try {
             setLoading(true)
             setError('')
-            
+
             console.log('🚀 Fetching analytics data...')
-            
-            // Fetch data from multiple endpoints
-            const [patientsResponse, reportsResponse, batchesResponse] = await Promise.all([
+
+            const [patientsResponse, reportsResponse] = await Promise.all([
                 apiClient.get('/patients?per_page=1000'),
-                apiClient.get('/lab-reports?per_page=1000'),
-                apiClient.get('/batches?per_page=100')
+                apiClient.get('/lab-reports?per_page=1000')
             ])
 
             console.log('✅ Raw API data:', {
                 patients: patientsResponse.data,
-                reports: reportsResponse.data,
-                batches: batchesResponse.data
+                reports: reportsResponse.data
             })
 
-            // Process the data
-            const patients = patientsResponse.data?.data || []
-            const reports = reportsResponse.data?.data || []
-            const batches = batchesResponse.data?.data || []
+            const patients = (patientsResponse.data as ApiListResponse<PatientRecord>)?.data || []
+            const reports = (reportsResponse.data as ApiListResponse<ReportRecord>)?.data || []
 
-            // Calculate overview stats
             const totalPatients = patients.length
             const totalReports = reports.length
-            const verifiedReports = reports.filter((r: any) => r.status === 'verified').length
-            const pendingReports = reports.filter((r: any) => r.status === 'processed').length
-            const failedReports = reports.filter((r: any) => r.status === 'failed').length
+            const verifiedReports = reports.filter((r: ReportRecord) => r.status === 'verified').length
+            const pendingReports = reports.filter((r: ReportRecord) => r.status === 'processed').length
+            const failedReports = reports.filter((r: ReportRecord) => r.status === 'failed').length
 
-            // Calculate processing time (mock for now)
-            const averageProcessingTime = 2.5 // minutes
-
-            // Generate daily trends for the last 30 days
+            const averageProcessingTime = 2.5
             const daily = generateDailyTrends(reports, patients, parseInt(timeRange))
-            
-            // Generate monthly trends for the last 6 months
             const monthly = generateMonthlyTrends(reports, patients)
-
-            // Process test categories from extracted data
             const testCategories = processTestCategories(reports)
-            
-            // Get top tests
             const topTests = getTopTests(reports)
-
-            // User activity stats
             const userActivity = processUserActivity(reports)
 
-            // Processing stats
             const processingStats = {
                 averageTime: 2.5,
                 fastestTime: 0.8,
@@ -143,144 +276,17 @@ export default function AnalyticsPage() {
 
             console.log('✅ Analytics data processed successfully')
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('💥 Failed to fetch analytics data:', err)
             setError('Failed to load analytics data')
         } finally {
             setLoading(false)
         }
-    }
+    }, [generateDailyTrends, generateMonthlyTrends, getTopTests, processTestCategories, processUserActivity, timeRange])
 
-    // Helper functions
-    const generateDailyTrends = (reports: any[], patients: any[], days: number) => {
-        const trends = []
-        const now = new Date()
-        
-        for (let i = days - 1; i >= 0; i--) {
-            const date = new Date(now)
-            date.setDate(date.getDate() - i)
-            const dateStr = date.toISOString().split('T')[0]
-            
-            const dayReports = reports.filter(r => r.created_at.startsWith(dateStr))
-            const dayPatients = patients.filter(p => p.created_at.startsWith(dateStr))
-            const dayVerified = dayReports.filter(r => r.status === 'verified')
-            
-            trends.push({
-                date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                reports: dayReports.length,
-                patients: dayPatients.length,
-                verified: dayVerified.length
-            })
-        }
-        
-        return trends
-    }
-
-    const generateMonthlyTrends = (reports: any[], patients: any[]) => {
-        const trends = []
-        const now = new Date()
-        
-        for (let i = 5; i >= 0; i--) {
-            const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-            const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-            
-            const monthReports = reports.filter(r => r.created_at.startsWith(monthStr))
-            const monthPatients = patients.filter(p => p.created_at.startsWith(monthStr))
-            const monthVerified = monthReports.filter(r => r.status === 'verified')
-            
-            trends.push({
-                month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-                reports: monthReports.length,
-                patients: monthPatients.length,
-                verified: monthVerified.length
-            })
-        }
-        
-        return trends
-    }
-
-    const processTestCategories = (reports: any[]) => {
-        const categories: Record<string, number> = {}
-        let totalTests = 0
-
-        reports.forEach(report => {
-            if (report.extracted_data && Array.isArray(report.extracted_data)) {
-                report.extracted_data.forEach((test: any) => {
-                    const category = test.category || 'UNCATEGORIZED'
-                    categories[category] = (categories[category] || 0) + 1
-                    totalTests++
-                })
-            }
-        })
-
-        return Object.entries(categories).map(([category, count]) => ({
-            category,
-            count,
-            percentage: totalTests > 0 ? Math.round((count / totalTests) * 100) : 0
-        })).sort((a, b) => b.count - a.count)
-    }
-
-    const getTopTests = (reports: any[]) => {
-        const tests: Record<string, { count: number; category: string }> = {}
-
-        reports.forEach(report => {
-            if (report.extracted_data && Array.isArray(report.extracted_data)) {
-                report.extracted_data.forEach((test: any) => {
-                    const testName = test.test_name || 'Unknown Test'
-                    const category = test.category || 'UNCATEGORIZED'
-                    
-                    if (!tests[testName]) {
-                        tests[testName] = { count: 0, category }
-                    }
-                    tests[testName].count++
-                })
-            }
-        })
-
-        return Object.entries(tests)
-            .map(([testName, data]) => ({
-                testName,
-                count: data.count,
-                category: data.category
-            }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 10)
-    }
-
-    const processUserActivity = (reports: any[]) => {
-        const users: Record<number, { name: string; uploads: number; verifications: number }> = {}
-
-        reports.forEach(report => {
-            // Count uploads
-            if (report.uploader) {
-                const userId = report.uploader.id
-                if (!users[userId]) {
-                    users[userId] = { name: report.uploader.name, uploads: 0, verifications: 0 }
-                }
-                users[userId].uploads++
-            }
-
-            // Count verifications
-            if (report.verifier) {
-                const userId = report.verifier.id
-                if (!users[userId]) {
-                    users[userId] = { name: report.verifier.name, uploads: 0, verifications: 0 }
-                }
-                users[userId].verifications++
-            }
-        })
-
-        return Object.entries(users).map(([userId, data]) => ({
-            userId: parseInt(userId),
-            userName: data.name,
-            uploadsCount: data.uploads,
-            verificationsCount: data.verifications
-        })).sort((a, b) => (b.uploadsCount + b.verificationsCount) - (a.uploadsCount + a.verificationsCount))
-    }
-
-    const getMaxValue = (data: any[], key: string) => {
-        return Math.max(...data.map(item => item[key]), 0)
-    }
+    useEffect(() => {
+        fetchAnalyticsData()
+    }, [fetchAnalyticsData])
 
     const formatNumber = (num: number) => {
         if (num >= 1000) {
@@ -473,7 +479,7 @@ export default function AnalyticsPage() {
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-lg font-semibold text-gray-900">Report Trends</h3>
                                         <div className="flex space-x-2">
-                                            {['reports', 'patients', 'verified'].map((metric) => (
+                                            {(['reports', 'patients', 'verified'] as TrendMetric[]).map((metric) => (
                                                 <button
                                                     key={metric}
                                                     onClick={() => setSelectedMetric(metric)}
@@ -575,7 +581,7 @@ export default function AnalyticsPage() {
                                 </div>
                                 <div className="p-6">
                                     <div className="space-y-3">
-                                        {analyticsData.userActivity.slice(0, 6).map((user, index) => (
+                                        {analyticsData.userActivity.slice(0, 6).map((user) => (
                                             <div key={user.userId} className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
                                                 <div className="flex items-center space-x-3">
                                                     <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-bold">

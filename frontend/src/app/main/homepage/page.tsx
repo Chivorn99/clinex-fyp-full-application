@@ -1,11 +1,20 @@
 'use client'
 import { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import Link from 'next/link'
 import { Calendar, Users, Clock, TrendingUp, Plus, X, Eye, FileText, RefreshCw } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
+
+interface ApiReport {
+    id: number
+    original_filename: string
+    status: string
+    created_at: string
+    patient?: {
+        name: string
+    }
+}
 
 // Interface for dashboard statistics
 interface DashboardStats {
@@ -69,30 +78,32 @@ export default function HomePage() {
                 batches: batchesResponse
             })
 
+            const reports: ApiReport[] = reportsResponse.data?.data || []
+
             // Calculate statistics
             const totalPatients = patientsResponse.data?.total || 0
             
             // Get today's uploads (reports created today)
             const today = new Date().toISOString().split('T')[0]
-            const todaysUploads = reportsResponse.data?.data?.filter((report: any) => 
+            const todaysUploads = reports.filter((report) => 
                 report.created_at.startsWith(today)
             ).length || 0
 
             // Count pending reports (processed but not verified)
-            const pendingReports = reportsResponse.data?.data?.filter((report: any) => 
+            const pendingReports = reports.filter((report) => 
                 report.status === 'processed'
             ).length || 0
 
             // Calculate this month's reports
             const currentMonth = new Date().getMonth()
             const currentYear = new Date().getFullYear()
-            const monthlyReports = reportsResponse.data?.data?.filter((report: any) => {
+            const monthlyReports = reports.filter((report) => {
                 const reportDate = new Date(report.created_at)
                 return reportDate.getMonth() === currentMonth && reportDate.getFullYear() === currentYear
             }).length || 0
 
             // Get recent reports for the modal
-            const recentReports = reportsResponse.data?.data?.slice(0, 5) || []
+            const recentReports = reports.slice(0, 5)
 
             setDashboardStats({
                 totalPatients,
@@ -110,7 +121,7 @@ export default function HomePage() {
                 recentReportsCount: recentReports.length
             })
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('💥 Failed to fetch dashboard stats:', err)
             setError('Failed to load dashboard statistics')
             
@@ -195,7 +206,7 @@ export default function HomePage() {
                                         Welcome back, {currentUser.name.split(' ')[1] || currentUser.name}! 👋
                                     </h1>
                                     <p className="mt-2 text-gray-600">
-                                        Here's what's happening at {currentUser.clinic} today
+                                        Here&apos;s what&apos;s happening at {currentUser.clinic} today
                                     </p>
                                     {error && (
                                         <p className="mt-2 text-sm text-red-600">

@@ -1,7 +1,10 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
 
+type JsonValue = string | number | boolean | null | JsonObject | JsonValue[]
+type JsonObject = { [key: string]: JsonValue }
+
 class ApiError extends Error {
-  constructor(public status: number, message: string, public errors?: any) {
+  constructor(public status: number, message: string, public errors?: unknown) {
     super(message)
     this.name = 'ApiError'
   }
@@ -73,7 +76,7 @@ export const apiClient = {
     })
   },
 
-  async post(endpoint: string, data?: any) {
+  async post(endpoint: string, data?: JsonObject | FormData) {
     const body = data instanceof FormData ? data : JSON.stringify(data)
     
     return this.request(endpoint, {
@@ -82,14 +85,14 @@ export const apiClient = {
     })
   },
 
-  async put(endpoint: string, data: any) {
+  async put(endpoint: string, data: JsonObject) {
     return this.request(endpoint, {
       method: 'PUT',
       body: JSON.stringify(data),
     })
   },
 
-  async patch(endpoint: string, data: any) {
+  async patch(endpoint: string, data: JsonObject) {
     return this.request(endpoint, {
       method: 'PATCH',
       body: JSON.stringify(data),

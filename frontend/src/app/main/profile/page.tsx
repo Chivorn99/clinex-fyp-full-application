@@ -2,14 +2,16 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { User, Building2, Mail, Phone, MapPin, Calendar, Edit3, Save, X, Camera, Shield, Bell, Globe } from 'lucide-react'
+import { User, Mail, Phone, Calendar, Edit3, Save, X, Camera, Shield } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
+
+type ProfileTab = 'profile' | 'security'
 
 export default function ProfilePage() {
     const { user: authUser } = useAuth()
     const [isEditing, setIsEditing] = useState(false)
-    const [activeTab, setActiveTab] = useState<'profile' | 'clinic' | 'security'>('profile')
+    const [activeTab, setActiveTab] = useState<ProfileTab>('profile')
     const [loading, setLoading] = useState(true)
 
     const [userData, setUserData] = useState({
@@ -72,26 +74,6 @@ export default function ProfilePage() {
             setLoading(false)
         }
     }, [authUser])
-
-    const [clinicData, setClinicData] = useState({
-        name: 'Smith Medical Clinic',
-        address: '123 Healthcare Ave, Medical District',
-        city: 'New York',
-        state: 'NY',
-        zipCode: '10001',
-        phone: '+1 (555) 987-6543',
-        email: 'info@smithclinic.com',
-        website: 'www.smithclinic.com',
-        establishedYear: '2020',
-        specialties: ['General Medicine', 'Pediatrics', 'Cardiology']
-    })
-
-    const [securitySettings, setSecuritySettings] = useState({
-        twoFactorEnabled: true,
-        loginNotifications: true,
-        sessionTimeout: '30'
-    })
-
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
@@ -213,14 +195,13 @@ export default function ProfilePage() {
                         <nav className="-mb-px flex space-x-8 px-6">
                             {[
                                 { key: 'profile', label: 'Personal Info', icon: User },
-                                // { key: 'clinic', label: 'Clinic Details', icon: Building2 },
                                 { key: 'security', label: 'Security', icon: Shield },
                             ].map((tab) => {
                                 const Icon = tab.icon
                                 return (
                                     <button
                                         key={tab.key}
-                                        onClick={() => setActiveTab(tab.key as any)}
+                                        onClick={() => setActiveTab(tab.key as ProfileTab)}
                                         className={`${activeTab === tab.key
                                             ? 'border-blue-500 text-blue-600'
                                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -240,6 +221,7 @@ export default function ProfilePage() {
                             <div className="space-y-6">
                                 <div className="flex items-center space-x-6">
                                     <div className="relative">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
                                             className="h-24 w-24 rounded-full object-cover"
                                             src={userData.profileImage}

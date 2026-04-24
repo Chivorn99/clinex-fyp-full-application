@@ -3,8 +3,20 @@ import { useState, useRef } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { Upload, FileText, Trash2, Eye, AlertCircle, CheckCircle, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
+
+interface ApiValidationError {
+    [key: string]: string[]
+}
+
+interface ApiError {
+    status?: number
+    message?: string
+    errors?: ApiValidationError
+    stack?: string
+}
+
+const isApiError = (error: unknown): error is ApiError => typeof error === 'object' && error !== null
 
 interface UploadedFile {
     id: string
@@ -23,11 +35,10 @@ interface BatchResponse {
     processed_reports: number
     failed_reports: number
     created_at: string
-    uploaded_files?: any[]
+    uploaded_files?: unknown[]
 }
 
 export default function UploadPage() {
-    const { user } = useAuth()
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
     const [selectedFilePreview, setSelectedFilePreview] = useState<string | null>(null)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -145,27 +156,27 @@ export default function UploadPage() {
                 console.log('Batch uploaded successfully. Ready for manual processing.')
             }
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Full error details:', {
-                message: error.message,
-                status: error.status,
-                errors: error.errors,
-                stack: error.stack
+                message: isApiError(error) ? error.message : undefined,
+                status: isApiError(error) ? error.status : undefined,
+                errors: isApiError(error) ? error.errors : undefined,
+                stack: isApiError(error) ? error.stack : undefined
             })
             
             let errorMessage = 'Failed to upload files. Please try again.'
             
-            if (error.status === 401) {
+            if (isApiError(error) && error.status === 401) {
                 errorMessage = 'Authentication failed. Please log in again.'
-            } else if (error.status === 422) {
+            } else if (isApiError(error) && error.status === 422) {
                 errorMessage = `Validation failed: ${
                     error.errors 
                         ? Object.values(error.errors).flat().join(', ') 
                         : error.message
                 }`
-            } else if (error.status === 500) {
+            } else if (isApiError(error) && error.status === 500) {
                 errorMessage = 'Server error. Please try again later.'
-            } else if (error.message) {
+            } else if (isApiError(error) && error.message) {
                 errorMessage = error.message
             }
             
@@ -197,9 +208,13 @@ export default function UploadPage() {
             } else {
                 setError('Failed to start processing')
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Processing error:', error)
-            setError(error.message || 'Failed to start processing')
+            if (isApiError(error) && error.message) {
+                setError(error.message)
+            } else {
+                setError('Failed to start processing')
+            }
         } finally {
             setIsUploading(false)
         }

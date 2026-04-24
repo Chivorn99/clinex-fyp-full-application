@@ -1,5 +1,5 @@
 'use client'
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface User {
@@ -28,11 +28,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
-  useEffect(() => {
-    checkAuth()
-  }, [])
+  const logout = useCallback(() => {
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('user')
+    
+    // Clear both cookies
+    document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT'
+    document.cookie = 'user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT'
+    
+    setUser(null)
+    router.push('/auth/login')
+  }, [router])
 
-  const checkAuth = () => {
+  const checkAuth = useCallback(() => {
     try {
       const token = localStorage.getItem('auth_token')
       const userData = localStorage.getItem('user')
@@ -49,7 +57,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [logout])
+
+  useEffect(() => {
+    checkAuth()
+  }, [checkAuth])
 
   const login = (token: string, userData: User) => {
     localStorage.setItem('auth_token', token)
@@ -59,18 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     document.cookie = `user_role=${userData.role}; path=/; max-age=86400`
     
     setUser(userData)
-  }
-
-  const logout = () => {
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('user')
-    
-    // Clear both cookies
-    document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT'
-    document.cookie = 'user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT'
-    
-    setUser(null)
-    router.push('/auth/login')
   }
 
   return (

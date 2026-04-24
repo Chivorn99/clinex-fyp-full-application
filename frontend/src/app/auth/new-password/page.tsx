@@ -5,6 +5,13 @@ import Link from 'next/link'
 import { Lock, Eye, EyeOff, CheckCircle } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 
+const getErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
+    return (err as { message: string }).message
+  }
+  return fallback
+}
+
 export default function NewPasswordPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -51,8 +58,8 @@ export default function NewPasswordPage() {
       } else {
         setError(response.message || 'Failed to reset password')
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to reset password. Please try again.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to reset password. Please try again.'))
     } finally {
       setIsLoading(false)
     }

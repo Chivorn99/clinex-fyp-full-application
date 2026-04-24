@@ -5,6 +5,13 @@ import Link from 'next/link'
 import { Mail, ArrowLeft, RefreshCw } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 
+const getErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
+    return (err as { message: string }).message
+  }
+  return fallback
+}
+
 export default function VerifyOTPPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -84,8 +91,8 @@ export default function VerifyOTPPage() {
         setOtp(['', '', '', '', '', ''])
         inputRefs.current[0]?.focus()
       }
-    } catch (err: any) {
-      setError(err.message || 'Invalid OTP code. Please try again.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Invalid OTP code. Please try again.'))
       setOtp(['', '', '', '', '', ''])
       inputRefs.current[0]?.focus()
     } finally {
@@ -110,8 +117,8 @@ export default function VerifyOTPPage() {
       } else {
         setError(response.message || 'Failed to resend OTP')
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to resend OTP. Please try again.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to resend OTP. Please try again.'))
     } finally {
       setIsResending(false)
     }
