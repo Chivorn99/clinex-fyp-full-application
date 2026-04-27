@@ -2,6 +2,12 @@
 
 Monorepo for Clinex backend (Laravel) and frontend (Next.js).
 
+Detailed operations guide:
+- PROJECT_FLOW_AND_OPERATIONS.md
+
+Hospital handover SOP (one page):
+- HOSPITAL_HANDOVER_SOP.md
+
 ## KV Hospital Intranet Model
 
 This project is best hosted on a private hospital network instead of the public internet.
