@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ReportBatch;
 use App\Models\LabReport;
 use App\Jobs\ProcessLabReportBatch;
+use App\Jobs\ProcessSingleLabReport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -69,6 +70,73 @@ class ReportBatchController extends Controller
                 ], 422);
             }
             return back()->withErrors($validator)->withInput();
+        }
+
+        $files = $request->file('files');
+
+        if (count($files) === 1) {
+            $file = $files[0];
+            $fileHash = hash_file('sha256', $file->getPathname());
+            $existingReport = LabReport::where('file_hash', $fileHash)->first();
+
+            if ($existingReport && $existingReport->status === 'verified') {
+                $message = 'This report is already verified and cannot be replaced.';
+
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $message,
+                        'errors' => ['files' => [$message]],
+                    ], 422);
+                }
+
+                return back()->withErrors(['files' => $message])->withInput();
+            }
+
+            if ($existingReport && in_array($existingReport->status, ['uploaded', 'processing', 'processed', 'failed'], true) && is_null($existingReport->verified_at)) {
+                return $this->replaceUnverifiedReport($request, $existingReport, $file);
+            }
+        }
+
+        if (count($files) > 1) {
+            $duplicateFilenames = [];
+
+            foreach ($files as $file) {
+                $fileHash = hash_file('sha256', $file->getPathname());
+                $existingReport = LabReport::where('file_hash', $fileHash)->first();
+
+                if (!$existingReport) {
+                    continue;
+                }
+
+                if ($existingReport->status === 'verified') {
+                    $duplicateFilenames[] = $file->getClientOriginalName();
+                    continue;
+                }
+
+                $duplicateFilenames[] = $file->getClientOriginalName();
+            }
+
+            if (!empty($duplicateFilenames)) {
+                $message = 'One or more files already exist as unverified reports. Please replace them one at a time from the report details page.';
+
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $message,
+                        'errors' => [
+                            'files' => [
+                                $message,
+                                'Duplicates: ' . implode(', ', array_unique($duplicateFilenames)),
+                            ],
+                        ],
+                    ], 422);
+                }
+
+                return back()->withErrors([
+                    'files' => $message . ' Duplicates: ' . implode(', ', array_unique($duplicateFilenames)),
+                ])->withInput();
+            }
         }
 
         DB::beginTransaction();
@@ -195,6 +263,119 @@ class ReportBatchController extends Controller
         $batchNumber = $todayBatchCount + 1;
         
         return "Batch{$batchNumber} - {$today}";
+    }
+
+    /**
+     * Replace an existing unverified report in-place and re-run OCR.
+     */
+    private function replaceUnverifiedReport(Request $request, LabReport $labReport, $file)
+    {
+        if (in_array($labReport->status, ['processing'], true)) {
+            $message = 'This report is currently processing. Please try again after processing completes.';
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                    'errors' => ['files' => [$message]],
+                ], 422);
+            }
+
+            return back()->withErrors(['files' => $message])->withInput();
+        }
+
+        $oldStoragePath = $labReport->storage_path;
+        $batchFolder = 'lab_reports/batch_' . $labReport->batch_id;
+        Storage::disk('private')->makeDirectory($batchFolder);
+
+        $originalName = $file->getClientOriginalName();
+        $timestamp = time();
+        $storedName = $timestamp . '_' . Str::random(8) . '_' . Str::slug(pathinfo($originalName, PATHINFO_FILENAME)) . '.pdf';
+        $storagePath = $batchFolder . '/' . $storedName;
+
+        Storage::disk('private')->putFileAs($batchFolder, $file, $storedName);
+
+        DB::beginTransaction();
+
+        try {
+            $labReport->update([
+                'original_filename' => $originalName,
+                'stored_filename' => $storedName,
+                'storage_path' => $storagePath,
+                'file_size' => $file->getSize(),
+                'mime_type' => $file->getMimeType(),
+                'file_hash' => hash_file('sha256', $file->getPathname()),
+                'status' => 'uploaded',
+                'uploaded_at' => now(),
+                'processing_started_at' => null,
+                'processing_completed_at' => null,
+                'processed_at' => null,
+                'processing_time' => null,
+                'processing_error' => null,
+                'verified_by' => null,
+                'verified_at' => null,
+                'notes' => null,
+                'patient_id' => null,
+                'extracted_data' => null,
+                'raw_ocr_text' => null,
+            ]);
+
+            DB::commit();
+
+            if ($oldStoragePath && $oldStoragePath !== $storagePath) {
+                Storage::disk('private')->delete($oldStoragePath);
+            }
+
+            ProcessSingleLabReport::dispatch($labReport->fresh())->onQueue('lab-reports');
+
+            Log::info('Unverified report replaced successfully', [
+                'lab_report_id' => $labReport->id,
+                'batch_id' => $labReport->batch_id,
+                'user_id' => auth()->id(),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'batch' => $labReport->fresh(['batch', 'uploader'])->batch,
+                        'uploaded_files' => [[
+                            'id' => $labReport->id,
+                            'original_name' => $originalName,
+                            'stored_name' => $storedName,
+                            'size' => $file->getSize(),
+                            'status' => 'uploaded',
+                            'replaced' => true,
+                        ]],
+                        'replaced_report' => $labReport->fresh(['batch', 'uploader']),
+                    ],
+                    'message' => 'Existing unverified report replaced and reprocessing started',
+                ], 200);
+            }
+
+            return redirect()->route('batches.show', $labReport->batch)
+                ->with('success', 'Existing unverified report replaced and reprocessing started');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Storage::disk('private')->delete($storagePath);
+
+            Log::error('Unverified report replacement failed', [
+                'lab_report_id' => $labReport->id,
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id(),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to replace unverified report',
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
+
+            return back()->withErrors(['error' => 'Failed to replace unverified report: ' . $e->getMessage()])->withInput();
+        }
     }
 
     /**

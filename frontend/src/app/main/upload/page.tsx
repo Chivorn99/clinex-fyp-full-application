@@ -18,6 +18,34 @@ interface ApiError {
 
 const isApiError = (error: unknown): error is ApiError => typeof error === 'object' && error !== null
 
+const getUploadErrorMessage = (error: unknown): string => {
+    if (isApiError(error) && error.status === 401) {
+        return 'Authentication failed. Please log in again.'
+    }
+
+    if (isApiError(error) && error.status === 422) {
+        const validationMessage = error.errors
+            ? Object.values(error.errors).flat().join(', ')
+            : error.message
+
+        return `Validation failed: ${validationMessage || 'Please check the uploaded files.'}`
+    }
+
+    if (isApiError(error) && error.status === 500) {
+        return 'Server error. Please try again later.'
+    }
+
+    if (error instanceof Error && error.message) {
+        return error.message
+    }
+
+    if (isApiError(error) && error.message) {
+        return error.message
+    }
+
+    return 'Failed to upload files. Please try again.'
+}
+
 interface UploadedFile {
     id: string
     name: string
@@ -147,39 +175,20 @@ export default function UploadPage() {
                 }))
             )
 
-            // If auto-processing is enabled, redirect to monitoring
+            // If auto-processing is enabled, take user directly to verification flow for this batch.
             if (autoProcess) {
                 setTimeout(() => {
-                    router.push(`/main/verification/monitoring`)
+                    router.push(`/main/verification?batchId=${batch.id}`)
                 }, 1500)
             } else {
                 console.log('Batch uploaded successfully. Ready for manual processing.')
             }
 
         } catch (error: unknown) {
-            console.error('Full error details:', {
-                message: isApiError(error) ? error.message : undefined,
-                status: isApiError(error) ? error.status : undefined,
-                errors: isApiError(error) ? error.errors : undefined,
-                stack: isApiError(error) ? error.stack : undefined
-            })
-            
-            let errorMessage = 'Failed to upload files. Please try again.'
-            
-            if (isApiError(error) && error.status === 401) {
-                errorMessage = 'Authentication failed. Please log in again.'
-            } else if (isApiError(error) && error.status === 422) {
-                errorMessage = `Validation failed: ${
-                    error.errors 
-                        ? Object.values(error.errors).flat().join(', ') 
-                        : error.message
-                }`
-            } else if (isApiError(error) && error.status === 500) {
-                errorMessage = 'Server error. Please try again later.'
-            } else if (isApiError(error) && error.message) {
-                errorMessage = error.message
-            }
-            
+            // Keep expected request failures as warnings to avoid noisy Next.js console overlay.
+            console.warn('Upload failed', error)
+
+            const errorMessage = getUploadErrorMessage(error)
             setError(errorMessage)
             
             // Update files to error status
@@ -204,7 +213,7 @@ export default function UploadPage() {
             
             // Handle different response structures
             if (response.success || response.data || response.id) {
-                router.push(`/main/verification/monitoring`)
+                router.push(`/main/verification?batchId=${currentBatch.id}`)
             } else {
                 setError('Failed to start processing')
             }

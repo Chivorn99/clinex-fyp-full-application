@@ -18,6 +18,7 @@ interface ApiBatch {
 
 interface ApiReport {
     id: number | string
+    status?: string
     original_filename?: string
     filename?: string
     patient_name?: string
@@ -61,6 +62,7 @@ interface Report {
     created_at?: string
     updated_at?: string
     verification_status?: string
+    canVerify: boolean
     batch?: {
         id: number
         name: string
@@ -122,13 +124,25 @@ export default function ReportsPage() {
                     report.patient_name ||
                     `Patient ${report.id}`
 
-                // Determine verification status
+                const backendStatus = (report.status || '').toLowerCase()
+                const verificationStatus = (report.verification_status || '').toLowerCase()
+
+                // Determine high-level UI status
                 let status: 'verified' | 'unverified' | 'processing' = 'unverified'
-                if (report.verification_status === 'verified' || report.verified_by) {
+                if (verificationStatus === 'verified' || report.verified_by) {
                     status = 'verified'
-                } else if (report.verification_status === 'processing') {
+                } else if (
+                    verificationStatus === 'processing' ||
+                    backendStatus === 'processing' ||
+                    backendStatus === 'uploaded'
+                ) {
                     status = 'processing'
                 }
+
+                // Only processed, not-yet-verified reports should expose Verify actions.
+                const canVerify =
+                    status === 'unverified' &&
+                    (backendStatus === 'processed' || verificationStatus === 'unverified')
 
                 // Extract batch info
                 const batchId = report.batch?.id?.toString() ||
@@ -154,6 +168,7 @@ export default function ReportsPage() {
                     created_at: report.created_at,
                     updated_at: report.updated_at,
                     verification_status: report.verification_status,
+                    canVerify,
                     batch: {
                         id: parseInt(batchId),
                         name: batchName
@@ -347,6 +362,11 @@ export default function ReportsPage() {
         router.push(`/main/reports/report-details?id=${reportId}`)
     }
 
+    const handleVerifyReport = (report: Report) => {
+        const queryBatchId = report.batch?.id || report.batchId
+        router.push(`/main/verification?batchId=${queryBatchId}&reportId=${report.id}`)
+    }
+
     if (loading) {
         return (
             <DashboardLayout>
@@ -507,9 +527,9 @@ export default function ReportsPage() {
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Processed Date
                                         </th>
-                                        {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Actions
-                                        </th> */}
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -547,7 +567,7 @@ export default function ReportsPage() {
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                 {formatDate(report.processedDate)}
                                             </td>
-                                            {/* <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                 <div className="flex space-x-2">
                                                     <button
                                                         onClick={(e) => {
@@ -559,15 +579,20 @@ export default function ReportsPage() {
                                                     >
                                                         <Eye className="h-4 w-4" />
                                                     </button>
-                                                    <button
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        className="text-green-600 hover:text-green-900"
-                                                        title="Download Report"
-                                                    >
-                                                        <Download className="h-4 w-4" />
-                                                    </button>
+                                                    {report.canVerify && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleVerifyReport(report)
+                                                            }}
+                                                            className="text-green-600 hover:text-green-900"
+                                                            title="Verify Report"
+                                                        >
+                                                            <CheckCircle className="h-4 w-4" />
+                                                        </button>
+                                                    )}
                                                 </div>
-                                            </td> */}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
