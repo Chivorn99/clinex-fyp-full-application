@@ -2,73 +2,77 @@
 
 Monorepo for Clinex backend (Laravel) and frontend (Next.js).
 
+## KV Hospital Intranet Model
+
+This project is best hosted on a private hospital network instead of the public internet.
+
+In practice, one trusted server inside the KV Hospital LAN runs both apps:
+- Laravel backend on an internal port such as `8000`
+- Next.js frontend on an internal port such as `3000`
+
+Staff devices on the same network open the frontend using the server's internal IP or internal DNS name, for example `http://10.10.5.20:3000`. The frontend then calls the backend API at `http://10.10.5.20:8000/api`.
+
+The important rule is simple: do not expose these ports to the public internet. Keep access limited to the hospital network or a VPN.
+
 ## Project Structure
 - `backend`: Laravel API, queue jobs, OCR integration
 - `frontend`: Next.js web app
 
 ## 1. Clone
 ```bash
-git clone <your-repo-url>
-cd "Clinex Application"
+git clone https://github.com/Chivorn99/clinex-fyp-full-application.git
+cd "clinex-fyp-full-application"
 ```
 
-## 2. Prerequisites
-- PHP 8.2+
-- Composer 2+
-- Node.js 20+
-- MySQL 8+
-- Python 3.10+
+## 2. Preferred Setup (Docker + Makefile)
 
-Optional but recommended:
-- Redis (for queue/cache in non-local setups)
+This is the recommended path for confidential intranet deployment and for developer onboarding.
 
-## 3. Backend Setup (Laravel)
+### 2.1 Requirements
+- Docker Desktop (or Docker Engine + Docker Compose plugin)
+- GNU Make (optional convenience wrapper)
+
+### 2.2 Configure host IP for intranet
+Pick your intranet host IP or internal DNS, then run:
+
 ```bash
-cd backend
-composer install
-npm install
+make setup HOST=10.10.5.20
 ```
 
-Create your local environment file:
+This will:
+- Create `backend/.env` if missing
+- Create `frontend/.env.local` if missing
+- Set `APP_URL`, `FRONTEND_URL`, and `NEXT_PUBLIC_API_URL` for your intranet host
+
+### 2.3 Start all services in containers
 ```bash
-cp .env.example .env
+make docker-up
 ```
-If `.env.example` does not exist in your clone, create `.env` manually.
 
-Generate app key (if needed):
+### 2.4 Run database migrations
 ```bash
-php artisan key:generate
+make docker-migrate
 ```
 
-Set database values in `.env`, then run:
+### 2.5 Check logs
 ```bash
-php artisan migrate
+make docker-logs
 ```
 
-Build assets (if needed):
+### 2.6 Stop services
 ```bash
-npm run build
+make docker-down
 ```
 
-Run backend locally:
-```bash
-php artisan serve
-```
+After startup:
+- Frontend: `http://10.10.5.20:3000`
+- Backend API: `http://10.10.5.20:8000/api`
 
-### Queue worker
-In another terminal:
-```bash
-php artisan queue:work
-```
-
-## 4. Frontend Setup (Next.js)
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend default URL is typically `http://localhost:3000`.
+## 3. Docker Services Included
+- `mysql`: MySQL 8.4 database
+- `backend`: Laravel API container
+- `queue`: Laravel queue worker container
+- `frontend`: Next.js app container
 
 ## 5. OCR Setup (Google Document AI)
 
@@ -92,12 +96,31 @@ From `backend/scripts/python`:
 ```
 This creates a local virtual environment and installs required packages from `requirements.txt`.
 
-## 6. Run Locally
-Recommended order:
-1. Start MySQL
-2. Start backend (`php artisan serve`)
-3. Start queue worker (`php artisan queue:work`)
-4. Start frontend (`npm run dev`)
+## 6. Non-Docker Local Development (Optional)
+If you prefer to run directly on your machine:
+
+1. Install prerequisites manually: PHP 8.2+, Composer 2+, Node.js 20+, MySQL 8+, Python 3.10+
+2. Backend:
+```bash
+cd backend
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan serve --host=0.0.0.0 --port=8000
+```
+3. Queue worker (new terminal):
+```bash
+cd backend
+php artisan queue:work
+```
+4. Frontend:
+```bash
+cd frontend
+npm install
+npm run dev -- --hostname 0.0.0.0 --port 3000
+```
 
 ## 7. Credentials Safety Before Pushing
 
@@ -133,3 +156,4 @@ If a secret was ever committed, rotate it immediately (Google key, mail/app secr
 - If `php artisan cache:clear` fails with DB connection errors, ensure MySQL is running or temporarily use file cache locally.
 - If Python script says `ModuleNotFoundError: google.cloud`, run the Python setup script in `backend/scripts/python`.
 - If Document AI returns `NOT_FOUND` or permission errors, verify project id, region, processor id, and service-account IAM role.
+- If `make` is not available on Windows, run equivalent commands directly with `docker compose`.

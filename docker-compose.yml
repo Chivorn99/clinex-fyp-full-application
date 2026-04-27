@@ -1,0 +1,103 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: clinex-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-clinex}
+      MYSQL_USER: ${MYSQL_USER:-clinex}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-clinex_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: clinex-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+    env_file:
+      - ./backend/.env
+    environment:
+      APP_URL: ${APP_URL:-http://localhost:8000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${MYSQL_DATABASE:-clinex}
+      DB_USERNAME: ${MYSQL_USER:-clinex}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-clinex_password}
+      QUEUE_CONNECTION: database
+    ports:
+      - "8000:8000"
+    command: >
+      sh -lc "composer install --no-interaction --prefer-dist --no-progress
+      && php artisan key:generate --force
+      && php artisan serve --host=0.0.0.0 --port=8000"
+
+  queue:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: clinex-queue
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${MYSQL_DATABASE:-clinex}
+      DB_USERNAME: ${MYSQL_USER:-clinex}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-clinex_password}
+      QUEUE_CONNECTION: database
+    command: >
+      sh -lc "composer install --no-interaction --prefer-dist --no-progress
+      && php artisan queue:work --tries=1 --timeout=300"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: clinex-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api}
+    ports:
+      - "3000:3000"
+    command: >
+      sh -lc "npm install
+      && npm run dev -- --hostname 0.0.0.0 --port 3000"
+
+volumes:
+  mysql_data:
+  backend_vendor:
+  frontend_node_modules:
