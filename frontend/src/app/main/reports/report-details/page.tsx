@@ -111,25 +111,28 @@ export default function ReportDetailsPage() {
 
             if (response.success && response.data?.lab_report) {
                 const labReport = response.data.lab_report
-                const extractedData = response.data.extracted_data
+                const extractedData = response.data.extracted_data ?? {}
+                const patientInfo = extractedData.patientInfo ?? extractedData.patient_info ?? {}
+                const labInfo = extractedData.labInfo ?? extractedData.lab_info ?? {}
+                const testResults = extractedData.testResults ?? extractedData.test_results ?? []
 
                 const transformedReportData: ReportData = {
                     patientInfo: {
-                        name: extractedData.patientInfo?.name || 'N/A',
-                        patientId: extractedData.patientInfo?.patientId || 'N/A',
-                        age: extractedData.patientInfo?.age || 'N/A',
-                        gender: extractedData.patientInfo?.gender || 'N/A',
-                        phone: extractedData.patientInfo?.phone || null
+                        name: patientInfo.name || 'N/A',
+                        patientId: patientInfo.patientId || patientInfo.patient_id || 'N/A',
+                        age: patientInfo.age || 'N/A',
+                        gender: patientInfo.gender || 'N/A',
+                        phone: patientInfo.phone || null
                     },
                     labInfo: {
-                        labId: extractedData.labInfo?.labId || 'N/A',
-                        requestedBy: extractedData.labInfo?.requestedBy || 'N/A',
-                        requestedDate: extractedData.labInfo?.requestedDate || 'N/A',
-                        collectedDate: extractedData.labInfo?.collectedDate || 'N/A',
-                        analysisDate: extractedData.labInfo?.analysisDate || 'N/A',
-                        validatedBy: extractedData.labInfo?.validatedBy || 'N/A'
+                        labId: labInfo.labId || labInfo.lab_id || 'N/A',
+                        requestedBy: labInfo.requestedBy || labInfo.requested_by || 'N/A',
+                        requestedDate: labInfo.requestedDate || labInfo.requested_date || 'N/A',
+                        collectedDate: labInfo.collectedDate || labInfo.collected_date || 'N/A',
+                        analysisDate: labInfo.analysisDate || labInfo.analysis_date || 'N/A',
+                        validatedBy: labInfo.validatedBy || labInfo.validated_by || 'N/A'
                     },
-                    testResults: extractedData.testResults || []
+                    testResults: Array.isArray(testResults) ? testResults : []
                 }
 
                 const transformedMetadata: ReportMetadata = {

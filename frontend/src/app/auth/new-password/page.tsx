@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Lock, Eye, EyeOff, CheckCircle } from 'lucide-react'
@@ -25,6 +25,12 @@ export default function NewPasswordPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+
+  useEffect(() => {
+    if (!email || !code) {
+      router.replace('/auth/reset-password')
+    }
+  }, [email, code, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -66,7 +72,6 @@ export default function NewPasswordPage() {
   }
 
   if (!email || !code) {
-    router.push('/auth/reset-password')
     return null
   }
 

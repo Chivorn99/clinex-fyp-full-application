@@ -40,6 +40,12 @@ export default function VerifyOTPPage() {
     return () => clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    if (!email) {
+      router.replace('/auth/reset-password')
+    }
+  }, [email, router])
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -125,7 +131,6 @@ export default function VerifyOTPPage() {
   }
 
   if (!email) {
-    router.push('/auth/reset-password')
     return null
   }
 

@@ -19,6 +19,7 @@ export default function SignUpPage() {
     clinicName: '',
     email: '',
     password: '',
+    role: 'lab_technician',
   })
   const [showPassword, setShowPassword] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
@@ -56,6 +57,7 @@ export default function SignUpPage() {
         email: formData.email,
         password: formData.password,
         password_confirmation: formData.password,
+        role: formData.role,
       })
 
       setSuccess('Account created successfully! Redirecting to login...')
