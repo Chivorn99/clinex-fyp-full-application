@@ -17,20 +17,23 @@ use Illuminate\Support\Facades\Route;
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
-Route::post('/register', [RegisteredUserController::class, 'registerApi']);
-// ->middleware('throttle:login');
+Route::post('/register', [RegisteredUserController::class, 'registerApi'])
+    ->middleware('throttle:login');
 
-Route::post('/login', [AuthenticatedSessionController::class, 'loginApi']);
-// ->middleware('throttle:login');
+Route::post('/login', [AuthenticatedSessionController::class, 'loginApi'])
+    ->middleware('throttle:login');
 
 Route::post('password/otp-request', [OtpPasswordController::class, 'sendOtpApi']);
 Route::post('password/otp-verify', [OtpPasswordController::class, 'resetPasswordApi']);
 Route::post('password/otp-verify-only', [OtpPasswordController::class, 'verifyOtpApi']);
 
 // DEVELOPMENT ONLY: Routes for testing OTP functionality
-Route::get('password/otp-get/{email}', [OtpPasswordController::class, 'getOtpForTesting']);
-Route::get('password/otp-get', [OtpPasswordController::class, 'getOtpForTesting']);
-Route::get('password/otp-all', [OtpPasswordController::class, 'getAllOtpsForTesting']);
+// These are only available when APP_ENV=local to prevent misuse on intranet
+if (app()->environment('local')) {
+    Route::get('password/otp-get/{email}', [OtpPasswordController::class, 'getOtpForTesting']);
+    Route::get('password/otp-get', [OtpPasswordController::class, 'getOtpForTesting']);
+    Route::get('password/otp-all', [OtpPasswordController::class, 'getAllOtpsForTesting']);
+}
 
 // User Management API routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -68,6 +71,9 @@ Route::middleware('auth:sanctum')->prefix('batches')->name('batches.')->group(fu
 
     // NEW: Verification endpoints
     Route::get('/{reportBatch}/reports-for-verification', [ReportBatchController::class, 'getReportsForVerification'])->name('reports-for-verification');
+
+    // Duplicate filename check (pre-upload)
+    Route::post('/check-duplicates', [ReportBatchController::class, 'checkDuplicates'])->name('check-duplicates');
 });
 
 // NEW: Global verification endpoint

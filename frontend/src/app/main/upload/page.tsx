@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { Upload, FileText, Trash2, Eye, AlertCircle, CheckCircle, X } from 'lucide-react'
+import { Upload, FileText, Trash2, Eye, AlertCircle, CheckCircle, X, AlertTriangle, Image } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api'
 
@@ -66,15 +66,29 @@ interface BatchResponse {
     uploaded_files?: unknown[]
 }
 
+const ACCEPTED_TYPES = [
+    'application/pdf',
+    'image/jpeg', 'image/png', 'image/tiff', 'image/gif',
+    'image/bmp', 'image/webp',
+]
+const ACCEPTED_EXTENSIONS = '.pdf,.jpg,.jpeg,.png,.tiff,.tif,.gif,.bmp,.webp'
+
+interface DuplicateWarning {
+    unverified: { filename: string; report_id: number; status: string }[]
+    verified: { filename: string; report_id: number; verified_at: string }[]
+}
+
 export default function UploadPage() {
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
     const [selectedFilePreview, setSelectedFilePreview] = useState<string | null>(null)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+    const [previewType, setPreviewType] = useState<'pdf' | 'image'>('pdf')
     const [isUploading, setIsUploading] = useState(false)
     const [isDragOver, setIsDragOver] = useState(false)
     const [currentBatch, setCurrentBatch] = useState<BatchResponse | null>(null)
     const [error, setError] = useState<string>('')
     const [autoProcess, setAutoProcess] = useState(true)
+    const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarning | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const router = useRouter()
 
@@ -82,20 +96,23 @@ export default function UploadPage() {
         if (!files) return
 
         setError('')
-        const pdfFiles = Array.from(files).filter(file => file.type === 'application/pdf')
+        const validFiles = Array.from(files).filter(file =>
+            ACCEPTED_TYPES.includes(file.type) ||
+            file.name.match(/\.(pdf|jpe?g|png|tiff?|gif|bmp|webp)$/i)
+        )
 
-        if (pdfFiles.length === 0) {
-            setError('Please select only PDF files')
+        if (validFiles.length === 0) {
+            setError('Please select PDF or image files (JPG, PNG, TIFF, GIF, BMP, WEBP)')
             return
         }
 
-        if (pdfFiles.length > 20) {
+        if (validFiles.length > 20) {
             setError('Maximum 20 files allowed per batch')
             return
         }
 
         // Add files to UI
-        const newFiles: UploadedFile[] = pdfFiles.map(file => ({
+        const newFiles: UploadedFile[] = validFiles.map(file => ({
             id: Math.random().toString(36).substr(2, 9),
             name: file.name,
             size: file.size,
@@ -113,6 +130,51 @@ export default function UploadPage() {
             return
         }
 
+        // --- Pre-upload duplicate filename check ---
+        try {
+            const filenames = uploadedFiles.map(f => f.name)
+            const dupResponse = await apiClient.post('/batches/check-duplicates', { filenames })
+
+            if (dupResponse.success && dupResponse.data?.has_duplicates) {
+                const verified = dupResponse.data.duplicates_verified || []
+                const unverified = dupResponse.data.duplicates_unverified || []
+
+                // Block verified duplicates
+                if (verified.length > 0) {
+                    const verifiedNames = verified.map((d: { filename: string }) => d.filename)
+                    setUploadedFiles(prev => prev.filter(f => !verifiedNames.includes(f.name)))
+                    setError(`These files are already verified and cannot be replaced: ${verifiedNames.join(', ')}`)
+                    return
+                }
+
+                // Warn about unverified duplicates
+                if (unverified.length > 0) {
+                    setDuplicateWarning({ unverified, verified: [] })
+                    return // Wait for user decision in the modal
+                }
+            }
+        } catch (dupErr) {
+            console.warn('Duplicate check failed, proceeding with upload:', dupErr)
+        }
+
+        await performUpload()
+    }
+
+    // Proceed after duplicate warning is acknowledged
+    const handleDuplicateConfirm = async () => {
+        setDuplicateWarning(null)
+        await performUpload()
+    }
+
+    const handleDuplicateCancel = () => {
+        if (duplicateWarning) {
+            const dupNames = duplicateWarning.unverified.map(d => d.filename)
+            setUploadedFiles(prev => prev.filter(f => !dupNames.includes(f.name)))
+        }
+        setDuplicateWarning(null)
+    }
+
+    const performUpload = async () => {
         setIsUploading(true)
         setError('')
 
@@ -266,6 +328,7 @@ export default function UploadPage() {
             const url = URL.createObjectURL(file.file)
             setPreviewUrl(url)
             setSelectedFilePreview(fileId)
+            setPreviewType(file.file.type === 'application/pdf' ? 'pdf' : 'image')
         }
     }
 
@@ -399,16 +462,24 @@ export default function UploadPage() {
                     {/* PDF Preview Container */}
                     <div className="bg-white shadow rounded-lg">
                         <div className="px-6 py-4 border-b border-gray-200">
-                            <h2 className="text-lg font-medium text-gray-900">PDF Preview</h2>
+                            <h2 className="text-lg font-medium text-gray-900">File Preview</h2>
                         </div>
                         <div className="p-6">
                             {selectedFilePreview && previewUrl ? (
                                 <div className="aspect-[3/4] bg-gray-100 rounded-lg border-2 border-gray-300 overflow-hidden">
-                                    <iframe
-                                        src={previewUrl}
-                                        className="w-full h-full rounded-lg"
-                                        title="PDF Preview"
-                                    />
+                                    {previewType === 'pdf' ? (
+                                        <iframe
+                                            src={previewUrl}
+                                            className="w-full h-full rounded-lg"
+                                            title="PDF Preview"
+                                        />
+                                    ) : (
+                                        <img
+                                            src={previewUrl}
+                                            className="w-full h-full object-contain rounded-lg"
+                                            alt="Image Preview"
+                                        />
+                                    )}
                                 </div>
                             ) : (
                                 <div
@@ -422,12 +493,12 @@ export default function UploadPage() {
                                 >
                                     <Upload className="h-12 w-12 text-gray-400 mb-4" />
                                     <p className="text-lg font-medium text-gray-900 mb-2">
-                                        {uploadedFiles.length > 0 ? 'Select a file to preview' : 'Upload Lab Report PDFs'}
+                                        {uploadedFiles.length > 0 ? 'Select a file to preview' : 'Upload Lab Reports'}
                                     </p>
                                     <p className="text-sm text-gray-500 text-center mb-4">
                                         {uploadedFiles.length > 0
                                             ? 'Click on any file to view it here'
-                                            : 'Drag and drop PDF files here, or click to select (Max 20 files)'
+                                            : 'Drag and drop PDF or image files here, or click to select (Max 20 files)'
                                         }
                                     </p>
                                     {uploadedFiles.length === 0 && (
@@ -444,7 +515,7 @@ export default function UploadPage() {
                                         ref={fileInputRef}
                                         type="file"
                                         multiple
-                                        accept=".pdf"
+                                        accept={ACCEPTED_EXTENSIONS}
                                         onChange={(e) => handleFileSelect(e.target.files)}
                                         className="hidden"
                                     />
@@ -596,6 +667,45 @@ export default function UploadPage() {
                         )}
                     </div>
                 </div>
+
+                {/* Duplicate Warning Modal */}
+                {duplicateWarning && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                            <div className="flex items-center mb-4">
+                                <AlertTriangle className="h-6 w-6 text-yellow-500 mr-3 flex-shrink-0" />
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                    Duplicate Files Detected
+                                </h3>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-3">
+                                The following files already exist as <strong>unverified</strong> reports. Uploading will replace the existing data:
+                            </p>
+                            <ul className="bg-yellow-50 rounded-md p-3 mb-4 max-h-40 overflow-y-auto">
+                                {duplicateWarning.unverified.map((d, i) => (
+                                    <li key={i} className="text-sm text-yellow-800 flex items-center py-1">
+                                        <FileText className="h-4 w-4 mr-2 flex-shrink-0" />
+                                        {d.filename} <span className="ml-auto text-xs text-yellow-600">({d.status})</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            <div className="flex space-x-3">
+                                <button
+                                    onClick={handleDuplicateCancel}
+                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                                >
+                                    Cancel &amp; Remove
+                                </button>
+                                <button
+                                    onClick={handleDuplicateConfirm}
+                                    className="flex-1 px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700"
+                                >
+                                    Replace &amp; Upload
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </DashboardLayout>
     )

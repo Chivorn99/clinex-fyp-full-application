@@ -57,7 +57,7 @@ class ReportBatchController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'files' => 'required|array|min:1|max:20', 
-            'files.*' => 'required|file|mimes:pdf|max:10240',
+            'files.*' => 'required|file|mimes:pdf,jpg,jpeg,png,tiff,tif,gif,bmp,webp|max:10240',
             'auto_process' => 'nullable|in:true,false,1,0',
         ]);
 
@@ -167,7 +167,8 @@ class ReportBatchController extends Controller
             foreach ($request->file('files') as $index => $file) {
                 $originalName = $file->getClientOriginalName();
                 $timestamp = time() + $index; // Ensure unique timestamps
-                $storedName = $timestamp . '_' . Str::random(8) . '_' . Str::slug(pathinfo($originalName, PATHINFO_FILENAME)) . '.pdf';
+                $extension = $file->getClientOriginalExtension() ?: 'pdf';
+                $storedName = $timestamp . '_' . Str::random(8) . '_' . Str::slug(pathinfo($originalName, PATHINFO_FILENAME)) . '.' . $extension;
                 $storagePath = $batchFolder . '/' . $storedName;
 
                 // Store file
@@ -290,7 +291,8 @@ class ReportBatchController extends Controller
 
         $originalName = $file->getClientOriginalName();
         $timestamp = time();
-        $storedName = $timestamp . '_' . Str::random(8) . '_' . Str::slug(pathinfo($originalName, PATHINFO_FILENAME)) . '.pdf';
+        $extension = $file->getClientOriginalExtension() ?: 'pdf';
+        $storedName = $timestamp . '_' . Str::random(8) . '_' . Str::slug(pathinfo($originalName, PATHINFO_FILENAME)) . '.' . $extension;
         $storagePath = $batchFolder . '/' . $storedName;
 
         Storage::disk('private')->putFileAs($batchFolder, $file, $storedName);
@@ -856,5 +858,63 @@ class ReportBatchController extends Controller
     {
         // Same implementation as in LabReportController
         // You can either copy the method or create a shared service/trait
+    }
+
+    /**
+     * Check for duplicate filenames before upload.
+     * Returns lists of unverified and verified duplicates.
+     */
+    public function checkDuplicates(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'filenames' => 'required|array|min:1',
+            'filenames.*' => 'required|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $filenames = $request->filenames;
+        $duplicatesUnverified = [];
+        $duplicatesVerified = [];
+
+        foreach ($filenames as $filename) {
+            $existing = LabReport::where('original_filename', $filename)
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if (!$existing) {
+                continue;
+            }
+
+            if ($existing->status === 'verified') {
+                $duplicatesVerified[] = [
+                    'filename' => $filename,
+                    'report_id' => $existing->id,
+                    'verified_at' => $existing->verified_at,
+                ];
+            } elseif (in_array($existing->status, ['uploaded', 'processing', 'processed', 'failed'], true)) {
+                $duplicatesUnverified[] = [
+                    'filename' => $filename,
+                    'report_id' => $existing->id,
+                    'status' => $existing->status,
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'duplicates_unverified' => $duplicatesUnverified,
+                'duplicates_verified' => $duplicatesVerified,
+                'has_duplicates' => !empty($duplicatesUnverified) || !empty($duplicatesVerified),
+            ],
+            'message' => 'Duplicate check completed'
+        ]);
     }
 }

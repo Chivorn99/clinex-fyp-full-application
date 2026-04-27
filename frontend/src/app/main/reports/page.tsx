@@ -129,20 +129,20 @@ export default function ReportsPage() {
 
                 // Determine high-level UI status
                 let status: 'verified' | 'unverified' | 'processing' = 'unverified'
-                if (verificationStatus === 'verified' || report.verified_by) {
+                if (backendStatus === 'verified' || verificationStatus === 'verified' || report.verified_by) {
                     status = 'verified'
                 } else if (
-                    verificationStatus === 'processing' ||
                     backendStatus === 'processing' ||
                     backendStatus === 'uploaded'
                 ) {
                     status = 'processing'
                 }
+                // 'processed' and 'failed' remain as 'unverified' (ready for verification)
 
                 // Only processed, not-yet-verified reports should expose Verify actions.
                 const canVerify =
                     status === 'unverified' &&
-                    (backendStatus === 'processed' || verificationStatus === 'unverified')
+                    backendStatus === 'processed'
 
                 // Extract batch info
                 const batchId = report.batch?.id?.toString() ||

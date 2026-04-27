@@ -77,9 +77,12 @@ class ProcessLabReportBatch implements ShouldQueue
         
         // Determine optimal worker count (max 3 for Google Document AI limits)
         $workerCount = min(3, $this->reportBatch->total_reports);
+
+        // Resolve Python binary: prefer python3 (Docker), fall back to python
+        $pythonPath = config('app.python_path', 'python3');
         
         $command = [
-            config('app.python_path', 'python'),
+            $pythonPath,
             $pythonScript,
             '--batch',
             $batchDirectory,
@@ -101,7 +104,30 @@ class ProcessLabReportBatch implements ShouldQueue
         $process->setTimeout(1200); // 20 minutes for large batches
         $process->setIdleTimeout(300); // 5 minutes idle timeout
 
-        $process->mustRun();
+        // Pass environment variables so Python can find credentials
+        $env = array_merge(getenv() ?: [], [
+            'GOOGLE_APPLICATION_CREDENTIALS' => storage_path('app/' . config('services.google.credentials_path', env('GOOGLE_APPLICATION_CREDENTIALS', ''))),
+            'GOOGLE_CLOUD_PROJECT_ID' => env('GOOGLE_CLOUD_PROJECT_ID', ''),
+            'GOOGLE_CLOUD_LOCATION' => env('GOOGLE_CLOUD_LOCATION', ''),
+            'GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID' => env('GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID', ''),
+            'PADDLE_OCR_ENABLED' => env('PADDLE_OCR_ENABLED', 'false'),
+            'PADDLE_OCR_LANGUAGE' => env('PADDLE_OCR_LANGUAGE', 'ch'),
+            'PADDLE_OCR_CONFIDENCE_THRESHOLD' => env('PADDLE_OCR_CONFIDENCE_THRESHOLD', '0.85'),
+        ]);
+        $process->setEnv($env);
+
+        try {
+            $process->mustRun();
+        } catch (ProcessFailedException $e) {
+            Log::error('OCR Python script failed', [
+                'batch_id' => $this->reportBatch->id,
+                'exit_code' => $process->getExitCode(),
+                'stderr' => $process->getErrorOutput(),
+                'stdout_preview' => substr($process->getOutput(), 0, 500),
+            ]);
+            throw new \Exception('OCR script failed: ' . $process->getErrorOutput());
+        }
+
         $output = $process->getOutput();
         
         if (empty($output)) {
