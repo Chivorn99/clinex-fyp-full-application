@@ -6,11 +6,9 @@ Monorepo for Clinex backend (Laravel) and frontend (Next.js).
 
 This project is best hosted on a private hospital network instead of the public internet.
 
-In practice, one trusted server inside the KV Hospital LAN runs both apps:
-- Laravel backend on an internal port such as `8000`
-- Next.js frontend on an internal port such as `3000`
+In practice, one trusted server inside the KV Hospital LAN runs all containers, and users access a single internal entrypoint through Nginx on `80/443`.
 
-Staff devices on the same network open the frontend using the server's internal IP or internal DNS name, for example `http://10.10.5.20:3000`. The frontend then calls the backend API at `http://10.10.5.20:8000/api`.
+Staff devices on the same network open the app using the server's internal IP or internal DNS name, for example `https://10.10.5.20`.
 
 The important rule is simple: do not expose these ports to the public internet. Keep access limited to the hospital network or a VPN.
 
@@ -44,35 +42,38 @@ This will:
 - Create `frontend/.env.local` if missing
 - Set `APP_URL`, `FRONTEND_URL`, and `NEXT_PUBLIC_API_URL` for your intranet host
 
-### 2.3 Start all services in containers
+### 2.3 Start all services in containers (intranet profile)
 ```bash
-make docker-up
+make docker-intranet-up
 ```
 
 ### 2.4 Run database migrations
 ```bash
-make docker-migrate
+make docker-intranet-migrate
 ```
 
 ### 2.5 Check logs
 ```bash
-make docker-logs
+make docker-intranet-logs
 ```
 
 ### 2.6 Stop services
 ```bash
-make docker-down
+make docker-intranet-down
 ```
 
 After startup:
-- Frontend: `http://10.10.5.20:3000`
-- Backend API: `http://10.10.5.20:8000/api`
+- App entrypoint: `https://10.10.5.20`
+- API path (proxied): `https://10.10.5.20/api`
+
+On first run, the Makefile generates a self-signed TLS certificate for intranet use under `ops/nginx/certs/`. For production hospital use, replace it with a certificate issued by your internal CA.
 
 ## 3. Docker Services Included
 - `mysql`: MySQL 8.4 database
 - `backend`: Laravel API container
 - `queue`: Laravel queue worker container
 - `frontend`: Next.js app container
+- `nginx` (in intranet profile): reverse proxy and single 80/443 entrypoint
 
 ## 5. OCR Setup (Google Document AI)
 

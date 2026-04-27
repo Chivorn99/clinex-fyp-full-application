@@ -8,6 +8,11 @@ BACKEND_PORT ?= 8000
 FRONTEND_PORT ?= 3000
 
 COMPOSE ?= docker compose
+COMPOSE_INTRAnet ?= docker compose -f docker-compose.yml -f docker-compose.intranet.yml
+INTRANET_CERT_DIR := ops/nginx/certs
+INTRANET_CERT_CRT := $(INTRANET_CERT_DIR)/clinex-intranet.crt
+INTRANET_CERT_KEY := $(INTRANET_CERT_DIR)/clinex-intranet.key
+INTRANET_CN ?= kvh.local
 
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
@@ -16,7 +21,7 @@ BACKEND_URL := http://$(HOST):$(BACKEND_PORT)
 API_URL := $(BACKEND_URL)/api
 FRONTEND_URL := http://$(HOST):$(FRONTEND_PORT)
 
-.PHONY: help clone setup env backend-env frontend-env intranet-config install backend-install frontend-install dev-backend dev-frontend status docker-up docker-down docker-restart docker-logs docker-build docker-migrate docker-shell-backend docker-shell-frontend
+.PHONY: help clone setup env backend-env frontend-env intranet-config install backend-install frontend-install dev-backend dev-frontend status docker-up docker-down docker-restart docker-logs docker-build docker-migrate docker-shell-backend docker-shell-frontend docker-intranet-cert docker-intranet-up docker-intranet-down docker-intranet-logs docker-intranet-migrate
 
 help:
 	@echo "Clinex local/intranet commands"
@@ -31,6 +36,10 @@ help:
 	@echo "  make docker-down                Stop Docker stack"
 	@echo "  make docker-migrate             Run Laravel migrations in container"
 	@echo "  make docker-logs                Follow all service logs"
+	@echo "  make docker-intranet-up         Start intranet profile (single 80/443 entrypoint)"
+	@echo "  make docker-intranet-down       Stop intranet profile"
+	@echo "  make docker-intranet-migrate    Run migrations in intranet profile"
+	@echo "  make docker-intranet-logs       Follow intranet profile logs"
 	@echo "  make status                     Print the current intranet URLs"
 
 clone:
@@ -91,3 +100,24 @@ docker-shell-backend:
 
 docker-shell-frontend:
 	@$(COMPOSE) exec frontend sh
+
+docker-intranet-cert:
+	@mkdir -p $(INTRANET_CERT_DIR)
+	@if [ ! -f "$(INTRANET_CERT_CRT)" ] || [ ! -f "$(INTRANET_CERT_KEY)" ]; then \
+		echo "Generating self-signed intranet certificate..."; \
+		docker run --rm -v "$(CURDIR)/$(INTRANET_CERT_DIR):/certs" alpine:3.20 sh -lc "apk add --no-cache openssl >/dev/null && openssl req -x509 -nodes -days 825 -newkey rsa:2048 -keyout /certs/clinex-intranet.key -out /certs/clinex-intranet.crt -subj '/CN=$(INTRANET_CN)'"; \
+	else \
+		echo "Intranet certificate already exists"; \
+	fi
+
+docker-intranet-up: docker-intranet-cert
+	@$(COMPOSE_INTRAnet) up -d --build
+
+docker-intranet-down:
+	@$(COMPOSE_INTRAnet) down
+
+docker-intranet-logs:
+	@$(COMPOSE_INTRAnet) logs -f
+
+docker-intranet-migrate:
+	@$(COMPOSE_INTRAnet) exec backend php artisan migrate

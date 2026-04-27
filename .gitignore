@@ -14,3 +14,7 @@ backend/scripts/python/.venv312/
 backend/scripts/python/extracted_text.txt
 backend/scripts/python/extracted_text.txt
 backend/scripts/python/extracted_text.txt
+
+# Nginx intranet certificates
+ops/nginx/certs/*.crt
+ops/nginx/certs/*.key
