@@ -81,6 +81,25 @@ def _get_paddle_config() -> Dict[str, Any]:
     }
 
 
+def _get_kiri_config() -> Dict[str, Any]:
+    """Load Kiri OCR configuration from environment."""
+    base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    dotenv_path = os.path.join(base_path, '.env')
+
+    def get_config_value(key: str, default: Optional[str] = None) -> Optional[str]:
+        return os.getenv(key) or _read_env_value_from_dotenv(dotenv_path, key) or default
+
+    enabled = get_config_value('KIRI_OCR_ENABLED', 'false').lower() in ('true', '1', 'yes')
+    decode_method = get_config_value('KIRI_OCR_DECODE_METHOD', 'accurate')
+    confidence_threshold = float(get_config_value('KIRI_OCR_CONFIDENCE_THRESHOLD', '0.7'))
+
+    return {
+        'enabled': enabled,
+        'decode_method': decode_method,
+        'confidence_threshold': confidence_threshold,
+    }
+
+
 
 def _infer_mime_type(file_path: str) -> str:
     extension = Path(file_path).suffix.lower()
@@ -196,6 +215,11 @@ def _parse_paddle_result(ocr_result: Any) -> tuple[str, float]:
 def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
     """Extract text from document using PaddleOCR with confidence scoring."""
     try:
+        # Pre-load torch (if available) before paddle to avoid Windows DLL conflicts
+        try:
+            import torch  # noqa: F401
+        except ImportError:
+            pass
         from paddleocr import PaddleOCR
     except ImportError as import_error:
         raise ImportError('paddleocr/paddlepaddle not installed in current environment') from import_error
@@ -248,6 +272,204 @@ def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
         'text': text,
         'confidence': confidence,
         'page_confidences': [confidence],
+    }
+
+
+def process_with_kiri_ocr(file_path: str) -> Dict[str, Any]:
+    """Extract text from document using Kiri OCR (Khmer-specialized transformer model)."""
+    try:
+        from kiri_ocr import OCR as KiriOCR
+    except ImportError as import_error:
+        raise ImportError('kiri-ocr not installed in current environment. Install with: pip install kiri-ocr') from import_error
+
+    kiri_config = _get_kiri_config()
+    mime_type = _infer_mime_type(file_path)
+
+    # Initialize Kiri OCR with configured decode method
+    decode_method = kiri_config.get('decode_method', 'accurate')
+    ocr = KiriOCR(decode_method=decode_method)
+
+    if mime_type == 'application/pdf':
+        # Kiri OCR only works with images — render PDF pages via PyMuPDF
+        try:
+            import fitz
+        except ImportError as import_error:
+            raise Exception('PyMuPDF is required for PDF + Kiri OCR flow') from import_error
+
+        doc = fitz.open(file_path)
+        all_text: List[str] = []
+        all_results: List[Dict[str, Any]] = []
+        page_confidences: List[float] = []
+
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            temp_img_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
+            pix.save(temp_img_path)
+
+            try:
+                text, results = ocr.extract_text(temp_img_path)
+                if text:
+                    all_text.append(text)
+                # Compute average confidence for this page
+                if results:
+                    page_conf = sum(r.get('confidence', 0.0) for r in results) / len(results)
+                    all_results.extend(results)
+                else:
+                    page_conf = 0.0
+                page_confidences.append(page_conf)
+                print(f'DEBUG: Kiri OCR processed page {page_num + 1} with confidence {page_conf:.3f}', file=sys.stderr)
+            finally:
+                if os.path.exists(temp_img_path):
+                    os.remove(temp_img_path)
+
+        doc.close()
+        avg_confidence = sum(page_confidences) / len(page_confidences) if page_confidences else 0.0
+        joined_text = '\n'.join(all_text)
+        print(f'DEBUG: Kiri OCR extracted {len(joined_text)} characters with avg confidence {avg_confidence:.3f}', file=sys.stderr)
+        return {
+            'text': joined_text,
+            'confidence': avg_confidence,
+            'results': all_results,
+            'page_confidences': page_confidences,
+        }
+
+    # Image file — process directly
+    text, results = ocr.extract_text(file_path)
+    avg_confidence = 0.0
+    if results:
+        avg_confidence = sum(r.get('confidence', 0.0) for r in results) / len(results)
+    print(f'DEBUG: Kiri OCR extracted {len(text)} characters with confidence {avg_confidence:.3f}', file=sys.stderr)
+    return {
+        'text': text,
+        'confidence': avg_confidence,
+        'results': results,
+        'page_confidences': [avg_confidence],
+    }
+
+
+def _detect_line_script(text: str) -> str:
+    """Detect the dominant script of a text line.
+
+    Returns 'khmer' if > 30% of alpha chars are Khmer,
+    'english' if predominantly Latin, or 'mixed' otherwise.
+    """
+    if not text or not text.strip():
+        return 'empty'
+
+    khmer_count = 0
+    latin_count = 0
+    digit_count = 0
+
+    for ch in text:
+        code = ord(ch)
+        if 0x1780 <= code <= 0x17FF or 0x19E0 <= code <= 0x19FF:
+            khmer_count += 1
+        elif (0x0041 <= code <= 0x005A) or (0x0061 <= code <= 0x007A):
+            latin_count += 1
+        elif 0x0030 <= code <= 0x0039:
+            digit_count += 1
+
+    total_alpha = khmer_count + latin_count
+    if total_alpha == 0:
+        return 'numeric' if digit_count > 0 else 'empty'
+
+    khmer_ratio = khmer_count / total_alpha
+    if khmer_ratio > 0.30:
+        return 'khmer'
+    elif khmer_ratio < 0.05:
+        return 'english'
+    else:
+        return 'mixed'
+
+
+def _fuse_ocr_texts(paddle_text: str, paddle_confidence: float,
+                    kiri_text: str, kiri_confidence: float,
+                    kiri_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Fuse PaddleOCR and Kiri OCR outputs by selecting the best engine per line.
+
+    Strategy:
+    - Lines with Khmer script: prefer Kiri OCR (purpose-built for Khmer)
+    - Lines with English/numeric: prefer PaddleOCR (strong at structured data)
+    - Mixed lines: use the engine with higher overall confidence
+    """
+    paddle_lines = paddle_text.split('\n') if paddle_text else []
+    kiri_lines = kiri_text.split('\n') if kiri_text else []
+
+    # Build per-line confidence map from Kiri results
+    kiri_line_confidences: Dict[int, float] = {}
+    if kiri_results:
+        for r in kiri_results:
+            line_num = r.get('line_number', 0)
+            if isinstance(line_num, int) and line_num > 0:
+                kiri_line_confidences[line_num - 1] = r.get('confidence', 0.0)
+
+    fused_lines: List[str] = []
+    engine_choices: List[str] = []
+    max_lines = max(len(paddle_lines), len(kiri_lines))
+
+    for i in range(max_lines):
+        paddle_line = paddle_lines[i].strip() if i < len(paddle_lines) else ''
+        kiri_line = kiri_lines[i].strip() if i < len(kiri_lines) else ''
+
+        # If one engine produced nothing for this line, use the other
+        if not paddle_line and kiri_line:
+            fused_lines.append(kiri_line)
+            engine_choices.append('kiri')
+            continue
+        if paddle_line and not kiri_line:
+            fused_lines.append(paddle_line)
+            engine_choices.append('paddle')
+            continue
+        if not paddle_line and not kiri_line:
+            continue
+
+        # Both engines produced output — decide based on script type
+        kiri_script = _detect_line_script(kiri_line)
+        paddle_script = _detect_line_script(paddle_line)
+
+        # For Khmer text, strongly prefer Kiri OCR
+        if kiri_script == 'khmer' or paddle_script == 'khmer':
+            fused_lines.append(kiri_line)
+            engine_choices.append('kiri')
+        # For English/numeric text, prefer PaddleOCR
+        elif paddle_script in ('english', 'numeric'):
+            fused_lines.append(paddle_line)
+            engine_choices.append('paddle')
+        # Mixed — use whichever engine has higher confidence
+        elif kiri_script == 'mixed' or paddle_script == 'mixed':
+            kiri_conf = kiri_line_confidences.get(i, kiri_confidence)
+            if kiri_conf >= paddle_confidence:
+                fused_lines.append(kiri_line)
+                engine_choices.append('kiri')
+            else:
+                fused_lines.append(paddle_line)
+                engine_choices.append('paddle')
+        else:
+            # Default: use PaddleOCR for structured lab data
+            fused_lines.append(paddle_line)
+            engine_choices.append('paddle')
+
+    fused_text = '\n'.join(fused_lines)
+    kiri_count = engine_choices.count('kiri')
+    paddle_count = engine_choices.count('paddle')
+    total = kiri_count + paddle_count
+
+    # Weighted average confidence based on engine contribution
+    if total > 0:
+        fused_confidence = (kiri_confidence * kiri_count + paddle_confidence * paddle_count) / total
+    else:
+        fused_confidence = max(paddle_confidence, kiri_confidence)
+
+    print(f'DEBUG: Fusion result — {kiri_count} Kiri lines, {paddle_count} Paddle lines, '
+          f'fused confidence {fused_confidence:.3f}', file=sys.stderr)
+
+    return {
+        'text': fused_text,
+        'confidence': fused_confidence,
+        'engine_choices': engine_choices,
+        'kiri_line_count': kiri_count,
+        'paddle_line_count': paddle_count,
     }
 
 
@@ -733,6 +955,7 @@ def extract_text_from_pdf_local(pdf_path: str) -> str:
 
 def process_single_file(file_path: str) -> Dict[str, Any]:
     paddle_config = {}
+    kiri_config = {}
     ocr_text = None
     confidence = 0.0
     ocr_engine = 'unknown'
@@ -741,9 +964,76 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
     try:
         mime_type = _infer_mime_type(file_path)
         paddle_config = _get_paddle_config()
+        kiri_config = _get_kiri_config()
         
         if mime_type in {'application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp'}:
-            if paddle_config['enabled']:
+            # ── Fusion mode: both Paddle + Kiri enabled ──
+            if paddle_config['enabled'] and kiri_config['enabled']:
+                # Pre-load torch before paddle to avoid Windows DLL conflicts (shm.dll)
+                try:
+                    import torch  # noqa: F401
+                except ImportError:
+                    pass
+                paddle_text = None
+                paddle_conf = 0.0
+                kiri_text = None
+                kiri_conf = 0.0
+                kiri_results = []
+
+                # Run PaddleOCR
+                try:
+                    paddle_result = process_with_paddle_ocr(file_path)
+                    paddle_text = paddle_result['text']
+                    paddle_conf = paddle_result['confidence']
+                    print(f'DEBUG: PaddleOCR pass complete — {len(paddle_text)} chars, confidence {paddle_conf:.3f}', file=sys.stderr)
+                except Exception as paddle_error:
+                    print(f'DEBUG: PaddleOCR failed ({paddle_error}), will use Kiri-only mode', file=sys.stderr)
+
+                # Run Kiri OCR
+                try:
+                    kiri_result = process_with_kiri_ocr(file_path)
+                    kiri_text = kiri_result['text']
+                    kiri_conf = kiri_result['confidence']
+                    kiri_results = kiri_result.get('results', [])
+                    print(f'DEBUG: Kiri OCR pass complete — {len(kiri_text)} chars, confidence {kiri_conf:.3f}', file=sys.stderr)
+                except Exception as kiri_error:
+                    print(f'DEBUG: Kiri OCR failed ({kiri_error}), will use Paddle-only mode', file=sys.stderr)
+
+                # Fuse results if both succeeded
+                if paddle_text and kiri_text:
+                    fused = _fuse_ocr_texts(paddle_text, paddle_conf, kiri_text, kiri_conf, kiri_results)
+                    ocr_text = fused['text']
+                    confidence = fused['confidence']
+                    ocr_engine = f'paddle+kiri (fused: {fused["paddle_line_count"]}P/{fused["kiri_line_count"]}K)'
+                elif kiri_text:
+                    ocr_text = kiri_text
+                    confidence = kiri_conf
+                    ocr_engine = 'kiri (paddle unavailable)'
+                elif paddle_text:
+                    ocr_text = paddle_text
+                    confidence = paddle_conf
+                    ocr_engine = 'paddle (kiri unavailable)'
+                else:
+                    # Both local engines failed — fall back to Google
+                    print(f'DEBUG: Both local engines failed, falling back to Google Document AI', file=sys.stderr)
+                    try:
+                        ocr_text = process_with_google_document_ai(file_path)
+                        ocr_engine = 'google (fallback from local engines)'
+                    except Exception as google_error:
+                        raise Exception(f'All OCR engines failed. Paddle, Kiri, and Google all unavailable. Last error: {google_error}')
+
+                # If fused confidence is still low, optionally try Google
+                if confidence < min(paddle_config['confidence_threshold'], kiri_config['confidence_threshold']):
+                    print(f'DEBUG: Fused confidence {confidence:.3f} below threshold, trying Google fallback', file=sys.stderr)
+                    try:
+                        google_text = process_with_google_document_ai(file_path)
+                        ocr_text = google_text
+                        ocr_engine = f'google (fallback from {ocr_engine})'
+                    except Exception as google_fallback_error:
+                        print(f'DEBUG: Google fallback unavailable ({google_fallback_error}); keeping fused output', file=sys.stderr)
+
+            # ── Paddle-only mode ──
+            elif paddle_config['enabled']:
                 try:
                     paddle_result = process_with_paddle_ocr(file_path)
                     ocr_text = paddle_result['text']
@@ -762,6 +1052,29 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
                     print(f'DEBUG: PaddleOCR failed ({paddle_error}), falling back to Google Document AI', file=sys.stderr)
                     ocr_text = process_with_google_document_ai(file_path)
                     ocr_engine = 'google (fallback from paddle)'
+
+            # ── Kiri-only mode ──
+            elif kiri_config['enabled']:
+                try:
+                    kiri_result = process_with_kiri_ocr(file_path)
+                    ocr_text = kiri_result['text']
+                    confidence = kiri_result['confidence']
+                    ocr_engine = 'kiri'
+
+                    if confidence < kiri_config['confidence_threshold']:
+                        print(f'DEBUG: Kiri OCR confidence {confidence:.3f} below threshold, falling back to Google Document AI', file=sys.stderr)
+                        try:
+                            ocr_text = process_with_google_document_ai(file_path)
+                            ocr_engine = 'google (fallback from kiri)'
+                        except Exception as google_fallback_error:
+                            print(f'DEBUG: Google fallback unavailable ({google_fallback_error}); keeping low-confidence Kiri output', file=sys.stderr)
+                            ocr_engine = 'kiri (low-confidence; google unavailable)'
+                except Exception as kiri_error:
+                    print(f'DEBUG: Kiri OCR failed ({kiri_error}), falling back to Google Document AI', file=sys.stderr)
+                    ocr_text = process_with_google_document_ai(file_path)
+                    ocr_engine = 'google (fallback from kiri)'
+
+            # ── No local engine — Google only ──
             else:
                 ocr_text = process_with_google_document_ai(file_path)
                 ocr_engine = 'google'
@@ -776,8 +1089,7 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
         result['success'] = True
         result['ocr_engine'] = ocr_engine
         result['rawText'] = ocr_text
-        if paddle_config.get('enabled'):
-            result['confidence'] = confidence
+        result['confidence'] = confidence
         return result
     except Exception as e:
         return {

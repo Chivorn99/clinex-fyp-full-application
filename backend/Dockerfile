@@ -23,7 +23,15 @@ RUN composer install --no-interaction --prefer-dist --no-progress || true
 
 COPY package.json package-lock.json* ./
 COPY scripts/python/requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt || true
+
+# Stage 1: Install CPU-only PyTorch first (much smaller than full CUDA bundle).
+# This prevents SIGBUS/OOM during Docker builds on resource-limited hosts (WSL2).
+RUN pip3 install --no-cache-dir --break-system-packages \
+        torch torchvision --index-url https://download.pytorch.org/whl/cpu || true
+
+# Stage 2: Install remaining OCR dependencies (kiri-ocr will reuse the CPU torch).
+RUN pip3 install --no-cache-dir --break-system-packages \
+        -r /tmp/requirements.txt || true
 
 COPY . .
 

@@ -16,13 +16,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // RateLimiter::for('api', function (Request $request) {
-        //     return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
-        // });
-        
-        // RateLimiter::for('login', function (Request $request) {
-        //     return Limit::perMinute(5)->by($request->ip()); // 5 login attempts per minute
-        // });
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
+
+        RateLimiter::for('login', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip()); // 5 login attempts per minute
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
