@@ -3,6 +3,7 @@ FROM php:8.2-cli
 WORKDIR /var/www/html
 
 # System dependencies for Laravel + OCR helpers.
+# libgl1 + libglib2.0-0 + libxcb1 are needed by OpenCV (used by Kiri OCR).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
@@ -12,6 +13,9 @@ RUN apt-get update \
         libonig-dev \
         python3 \
         python3-pip \
+        libgl1 \
+        libglib2.0-0 \
+        libxcb1 \
     && docker-php-ext-install pdo_mysql zip bcmath pcntl intl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -23,6 +27,11 @@ RUN composer install --no-interaction --prefer-dist --no-progress || true
 
 COPY package.json package-lock.json* ./
 COPY scripts/python/requirements.txt /tmp/requirements.txt
+
+# Replace opencv-python with headless variant (no X11/GUI deps required).
+# Do this BEFORE installing requirements so kiri-ocr reuses the headless build.
+RUN pip3 install --no-cache-dir --break-system-packages \
+        opencv-python-headless>=4.9.0
 
 # Stage 1: Install CPU-only PyTorch first (much smaller than full CUDA bundle).
 # This prevents SIGBUS/OOM during Docker builds on resource-limited hosts (WSL2).

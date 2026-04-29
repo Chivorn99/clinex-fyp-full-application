@@ -1,96 +1,104 @@
-werings Feat
-mas
+erine i20
 sina 625
 KV Hospital
+Qe
 K+
-ñšaj šunɲmist npmůdy:wimuziñpo shijm:qñonviná vůjungınınnkonu
-bniswu:qui:máquumïñ êquñsang :[n:im:) imwņsminümü äíîñ¤áƒš
-iņináciu nájs ķu µmw äñjs is instru
+àŝaj shopmuziei nɲmåj:winüzikpo shijm:qñünüiná vajunnnnnkninu
+bniswiu:qui:máquumïñ shquñsans :[n:im:i)s imwņsminümü äíîñ¤áƒš
+iņu žājs ķu µ mw ¦ājs ñ fins šumstrunu.ƒ‚Âƒ³º¶
 HOSPITAL
 min:/Name
-: HONG HOEN
-in tij/Age
-: 38 Y
+: HENG VANNAT
+ni/Age
+: 35 Y, 1 D
 In 9/Gender
-: Female
+: Male
 Patient ID
-: PT001876
+: PT001772
 Lab ID
-: LT001239
-iņ/Phone
-: 015624037
+: LT001177
+in/Phone
+: 060991736
 Requested Date
-18/03/2024 08:08
+11/03/2024 00:49
 Collected Date
-: 18/03/2024 08:44
+: 11/03/2024 09:09
 Analysis Date
-18/03/2024 08:44
+: 11/03/2024 09:09
 Requested By
-: Dr. ENG Hunchhay
+: Dr. Neak Bunteum
 LABORATORY REPORT
-HEMATOLOGY
+BIOCHIMISTRY
 Results
 Unit
 Reference Range
 Flag
-CBC
-WBC
+Creatinine,
+serum
+: 0.8
+mg/dL
+(0.9 1.1)
+L
+Urea/BUN
 :
-9.4
-10⁹/L
-(3.5-10.0)
-LYM%
+31
+mg/dL
+(6.0 40.0 )
+Glucose
 :
-39.4
-OP
-(15.0-50.0)
-MONO%
+130
+mg/dL
+(75-115)
+H H
+Cholesterole Total
+: 281
+mg/dL
+(0 - 200)
+Cholesterol-HDL
 :
-6.8
-09
-(2.0-15.0)
-NUE%
+65
+mg/dL
+(>60)
+Cholesterol-LDL
+: 165
+mg/dL
+(0 - 150)
+Н
+H H
+Tryglyceride
 :
-53.8
-%0
-(35.0-80.0)
-EOSINO%
-:
-12.9
-응
-(11.5-16.5)
-BASO%
-: 26.8
-09
-25.0-35.0)
-HGB
-:
-36.0
-g/dL
-(31.0-38.0)
-MCH
-:
-4.83
-pg
-(3.50-5.50)
-MCHC
-: 75.0
-g/dL
-(75.0-100.0)
-RBC
-: 36.0
-x1012/L
-(35.0-55.0)
-MCV
-:
-294
-fl
-(150-400)
+494
+mg/dL
+(0 - 150)
+Uric acide
+: 5.5
+mg/dL
+(3.5 - 6.0)
+ENZYMOLOGY
+Results
+Unit
+Reference Range
+Flag
+GGT (Gamm Glutamyl Transferas): 269
+U/L
+(0 - 55 )
+H
+IT!
+TRANSAMINASE
+SGPT/ALT
+126
+U/L
+(0 - 41)
+H H
+SGOT/AST
+56
+U/L
+(0 - 40)
 Validated By:
 Lab Technician:
 b
-ths
-2024-03-18 08:52
-2024-03-18 08:52
-mawgs: qûqnfumi wjšinēšu vynnjaw tannjaw (oywňanskunjom 5 ñ.8)
-i₪açıšņ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
+the
+2024-03-11 09:12
+2024-03-11 09:12
+mawgs: qûqniumi wijdinēšu vynnjaw tannjaw (oywňanskunjom 5 ñ.8)
+î₪açıšņ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
