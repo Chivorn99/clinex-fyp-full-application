@@ -4,6 +4,7 @@ import re
 import argparse
 import concurrent.futures
 import mimetypes
+import inspect
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 import time
@@ -73,12 +74,32 @@ def _get_paddle_config() -> Dict[str, Any]:
     enabled = get_config_value('PADDLE_OCR_ENABLED', 'false').lower() in ('true', '1', 'yes')
     language = get_config_value('PADDLE_OCR_LANGUAGE', 'ch')
     confidence_threshold = float(get_config_value('PADDLE_OCR_CONFIDENCE_THRESHOLD', '0.85'))
+    device = (get_config_value('PADDLE_OCR_DEVICE', 'auto') or 'auto').strip().lower()
+    gpu_id = (get_config_value('PADDLE_OCR_GPU_ID', '0') or '0').strip()
 
     return {
         'enabled': enabled,
         'language': language,
         'confidence_threshold': confidence_threshold,
+        # Device selection:
+        # - auto: try GPU first (if Paddle is CUDA-enabled + GPU present), else CPU
+        # - gpu:  try GPU first, else CPU
+        # - cpu:  force CPU
+        'device': device,
+        'gpu_id': gpu_id,
     }
+
+
+def _select_paddle_device(paddle_config: Dict[str, Any]) -> str:
+    device = str(paddle_config.get('device', 'auto') or 'auto').strip().lower()
+    gpu_id = str(paddle_config.get('gpu_id', '0') or '0').strip()
+    gpu_device = f'gpu:{gpu_id}' if gpu_id.isdigit() else 'gpu:0'
+
+    if device == 'cpu':
+        return 'cpu'
+    if device in {'gpu', 'cuda', 'auto'}:
+        return gpu_device
+    return gpu_device
 
 
 def _get_kiri_config() -> Dict[str, Any]:
@@ -220,13 +241,86 @@ def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
             import torch  # noqa: F401
         except ImportError:
             pass
+        import paddle
         from paddleocr import PaddleOCR
     except ImportError as import_error:
         raise ImportError('paddleocr/paddlepaddle not installed in current environment') from import_error
 
     paddle_config = _get_paddle_config()
     mime_type = _infer_mime_type(file_path)
-    ocr = PaddleOCR(lang=paddle_config['language'])
+
+    requested_device = _select_paddle_device(paddle_config)
+    selected_device = 'cpu'
+    use_gpu = False
+
+    try:
+        if requested_device.startswith('gpu'):
+            compiled_with_cuda = False
+            try:
+                compiled_with_cuda = bool(paddle.is_compiled_with_cuda())
+            except Exception:
+                compiled_with_cuda = False
+
+            device_count = 0
+            try:
+                device_count = int(paddle.device.cuda.device_count())
+            except Exception:
+                device_count = 0
+
+            if compiled_with_cuda and device_count > 0:
+                try:
+                    paddle.set_device(requested_device)
+                    selected_device = requested_device
+                    use_gpu = True
+                except Exception as device_error:
+                    print(
+                        f'DEBUG: Failed to set Paddle device to {requested_device} ({device_error}); falling back to CPU',
+                        file=sys.stderr,
+                    )
+                    paddle.set_device('cpu')
+            else:
+                print(
+                    f'DEBUG: Paddle GPU requested but unavailable '
+                    f'(compiled_with_cuda={compiled_with_cuda}, device_count={device_count}); using CPU',
+                    file=sys.stderr,
+                )
+                paddle.set_device('cpu')
+        else:
+            paddle.set_device('cpu')
+    except Exception as device_setup_error:
+        print(f'DEBUG: Paddle device setup failed ({device_setup_error}); using CPU', file=sys.stderr)
+        try:
+            paddle.set_device('cpu')
+        except Exception:
+            pass
+        selected_device = 'cpu'
+        use_gpu = False
+
+    ocr_kwargs: Dict[str, Any] = {
+        'lang': paddle_config['language'],
+    }
+    try:
+        signature = inspect.signature(PaddleOCR)
+        if 'use_gpu' in signature.parameters:
+            ocr_kwargs['use_gpu'] = use_gpu
+        elif 'use_cuda' in signature.parameters:
+            ocr_kwargs['use_cuda'] = use_gpu
+        elif 'device' in signature.parameters:
+            ocr_kwargs['device'] = selected_device
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        ocr = PaddleOCR(**ocr_kwargs)
+    except TypeError:
+        # Backward/forward compatibility: if PaddleOCR signature changed, fall back to minimal init.
+        ocr = PaddleOCR(lang=paddle_config['language'])
+
+    print(
+        f'DEBUG: PaddleOCR initialized (requested_device={paddle_config.get("device")}, '
+        f'selected_device={selected_device}, use_gpu={use_gpu})',
+        file=sys.stderr,
+    )
 
     if mime_type == 'application/pdf':
         try:

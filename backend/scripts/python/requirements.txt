@@ -15,3 +15,5 @@ kiri-ocr>=0.2.15
 # It requires Python 3.10-3.12 and paddlepaddle, which may not be
 # available on all platforms.
 # To install: pip install paddlepaddle>=3.0.0 paddleocr>=2.10.0
+paddlepaddle==3.3.1
+paddleocr==3.5.0

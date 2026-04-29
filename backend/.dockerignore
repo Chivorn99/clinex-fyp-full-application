@@ -3,6 +3,12 @@
 .env.*
 vendor
 node_modules
+.venv
+.venv*
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
 storage/logs
 storage/framework/cache
 storage/framework/sessions

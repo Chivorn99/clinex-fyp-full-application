@@ -11,6 +11,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
 
 class ProcessLabReportBatch implements ShouldQueue
@@ -121,6 +122,8 @@ class ProcessLabReportBatch implements ShouldQueue
             'PADDLE_OCR_ENABLED' => env('PADDLE_OCR_ENABLED', 'false'),
             'PADDLE_OCR_LANGUAGE' => env('PADDLE_OCR_LANGUAGE', 'ch'),
             'PADDLE_OCR_CONFIDENCE_THRESHOLD' => env('PADDLE_OCR_CONFIDENCE_THRESHOLD', '0.85'),
+            'PADDLE_OCR_DEVICE' => env('PADDLE_OCR_DEVICE', 'auto'),
+            'PADDLE_OCR_GPU_ID' => env('PADDLE_OCR_GPU_ID', '0'),
         ]);
         $process->setEnv($env);
 

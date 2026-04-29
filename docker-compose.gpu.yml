@@ -1,0 +1,11 @@
+services:
+  queue:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        PADDLE_VARIANT: gpu
+        PADDLE_GPU_VERSION: "3.3.0"
+        # Adjust this to match your CUDA driver/runtime (e.g. cu118, cu121, cu126)
+        PADDLE_GPU_INDEX_URL: "https://www.paddlepaddle.org.cn/packages/stable/cu126/"
+    gpus: all
