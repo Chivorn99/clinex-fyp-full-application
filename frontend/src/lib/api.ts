@@ -1,7 +1,31 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
 
+type JsonValue = string | number | boolean | null | JsonObject | JsonValue[]
+type JsonObject = { [key: string]: JsonValue }
+
+const extractApiErrorMessage = (result: unknown, fallback: string): string => {
+  if (typeof result !== 'object' || result === null) {
+    return fallback
+  }
+
+  const maybeMessage = (result as { message?: unknown }).message
+  if (typeof maybeMessage === 'string' && maybeMessage.trim().length > 0) {
+    return maybeMessage
+  }
+
+  const maybeErrors = (result as { errors?: unknown }).errors
+  if (typeof maybeErrors === 'object' && maybeErrors !== null) {
+    const firstFieldErrors = Object.values(maybeErrors as Record<string, unknown>)[0]
+    if (Array.isArray(firstFieldErrors) && typeof firstFieldErrors[0] === 'string') {
+      return firstFieldErrors[0]
+    }
+  }
+
+  return fallback
+}
+
 class ApiError extends Error {
-  constructor(public status: number, message: string, public errors?: any) {
+  constructor(public status: number, message: string, public errors?: unknown) {
     super(message)
     this.name = 'ApiError'
   }
@@ -39,10 +63,11 @@ export const apiClient = {
       }
 
       if (!response.ok) {
+        const fallback = `HTTP ${response.status}: ${response.statusText}`
         throw new ApiError(
           response.status,
-          result.message || `HTTP ${response.status}: ${response.statusText}`,
-          result.errors
+          extractApiErrorMessage(result, fallback),
+          typeof result === 'object' && result !== null ? (result as { errors?: unknown }).errors : undefined
         )
       }
 
@@ -73,7 +98,7 @@ export const apiClient = {
     })
   },
 
-  async post(endpoint: string, data?: any) {
+  async post(endpoint: string, data?: JsonObject | FormData) {
     const body = data instanceof FormData ? data : JSON.stringify(data)
     
     return this.request(endpoint, {
@@ -82,14 +107,14 @@ export const apiClient = {
     })
   },
 
-  async put(endpoint: string, data: any) {
+  async put(endpoint: string, data: JsonObject) {
     return this.request(endpoint, {
       method: 'PUT',
       body: JSON.stringify(data),
     })
   },
 
-  async patch(endpoint: string, data: any) {
+  async patch(endpoint: string, data: JsonObject) {
     return this.request(endpoint, {
       method: 'PATCH',
       body: JSON.stringify(data),

@@ -3,18 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import Navbar from './Navbar'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, logout, isLoading } = useAuth()
-
-  // Fallback mock user in case auth fails
-  const mockUser = {
-    id: 'mock_001',
-    name: 'Dr. Sarah Johnson',
-    email: 'sarah@smithclinic.com',
-    role: 'doctor'
-  }
-
-  // Use auth user if available, otherwise fallback to mock
-  const currentUser = user || mockUser
+  const { isLoading } = useAuth()
 
   if (isLoading) {
     return (

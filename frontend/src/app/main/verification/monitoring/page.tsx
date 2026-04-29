@@ -2,31 +2,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { CheckCircle, XCircle, Clock, FileText, AlertTriangle, RefreshCw, Download, Eye, CheckSquare, User, Calendar, ChevronDown, ChevronUp } from 'lucide-react'
+import { CheckCircle, RefreshCw, CheckSquare, User, Calendar, ChevronDown, ChevronUp } from 'lucide-react'
 import { apiClient } from '@/lib/api'
-
-interface BatchStatus {
-    id: number
-    name: string
-    status: 'pending' | 'processing' | 'completed' | 'failed'
-    total_reports: number
-    processed_reports: number
-    failed_reports: number
-    verified_reports?: number
-    created_at: string
-    processing_started_at?: string
-    processing_completed_at?: string
-    files?: FileStatus[]
-}
-
-interface FileStatus {
-    id: number
-    filename: string
-    status: 'pending' | 'processing' | 'completed' | 'failed' | 'processed'
-    processed_at?: string
-    error_message?: string
-    extracted_data?: any
-}
 
 interface ReportForVerification {
     id: number
@@ -85,7 +62,13 @@ interface LaravelPaginationResponse {
     total: number
 }
 
-type VerificationResponse = WrappedVerificationResponse | LaravelPaginationResponse
+interface ApiError {
+    response?: {
+        data?: unknown
+    }
+}
+
+const isApiError = (err: unknown): err is ApiError => typeof err === 'object' && err !== null
 
 export default function VerificationPage() {
     const router = useRouter()
@@ -94,8 +77,6 @@ export default function VerificationPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
     const [autoRefresh, setAutoRefresh] = useState(true)
-    const [currentPage, setCurrentPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
     const [totalPending, setTotalPending] = useState(0)
     const [searchTerm, setSearchTerm] = useState('')
     const [selectedBatch, setSelectedBatch] = useState<string>('')
@@ -115,21 +96,21 @@ export default function VerificationPage() {
         return () => {
             if (interval) clearInterval(interval)
         }
-    }, [autoRefresh, currentPage, searchTerm, selectedBatch])
+    }, [autoRefresh, searchTerm, selectedBatch]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Helper type guards
-    const isWrappedResponse = (data: any): data is WrappedVerificationResponse => {
-        return data && typeof data === 'object' && 'success' in data && data.success === true
+    const isWrappedResponse = (data: unknown): data is WrappedVerificationResponse => {
+        return typeof data === 'object' && data !== null && 'success' in data && (data as { success?: unknown }).success === true
     }
 
-    const isLaravelPaginationResponse = (data: any): data is LaravelPaginationResponse => {
-        return data && typeof data === 'object' && 'data' in data && Array.isArray(data.data) && 'last_page' in data
+    const isLaravelPaginationResponse = (data: unknown): data is LaravelPaginationResponse => {
+        return typeof data === 'object' && data !== null && 'data' in data && Array.isArray((data as { data?: unknown }).data) && 'last_page' in data
     }
 
     const fetchReportsForVerification = async () => {
         try {
             const params = new URLSearchParams({
-                page: currentPage.toString(),
+                page: '1',
                 per_page: '50' // Get more results to show all batches
             })
 
@@ -152,28 +133,24 @@ export default function VerificationPage() {
             if (isWrappedResponse(responseData)) {
                 // WrappedVerificationResponse
                 setReportsForVerification(responseData.data.data || [])
-                setTotalPages(responseData.data.last_page || 1)
                 setTotalPending(responseData.summary.total_pending || 0)
             } else if (isLaravelPaginationResponse(responseData)) {
                 // LaravelPaginationResponse
                 setReportsForVerification(responseData.data || [])
-                setTotalPages(responseData.last_page || 1)
                 setTotalPending(responseData.total || responseData.data.length)
             } else {
                 console.warn('Unexpected response structure:', responseData)
                 setReportsForVerification([])
-                setTotalPages(1)
                 setTotalPending(0)
             }
 
             setError('')
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Failed to fetch reports for verification:', err)
-            console.error('Error response:', err.response?.data)
+            console.error('Error response:', isApiError(err) ? err.response?.data : err)
             setError('Failed to fetch reports for verification')
 
             setReportsForVerification([])
-            setTotalPages(1)
             setTotalPending(0)
         } finally {
             setLoading(false)

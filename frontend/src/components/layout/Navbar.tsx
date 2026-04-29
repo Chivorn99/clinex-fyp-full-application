@@ -1,8 +1,7 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Menu, X, Bell, User, LogOut, Settings } from 'lucide-react'
+import { Menu, X, User, LogOut } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
 
@@ -11,7 +10,6 @@ export default function Navbar() {
     const [isProfileOpen, setIsProfileOpen] = useState(false)
     const [isLoggingOut, setIsLoggingOut] = useState(false)
     const { user, logout } = useAuth()
-    const router = useRouter()
 
     const handleLogout = async () => {
         setIsLoggingOut(true)

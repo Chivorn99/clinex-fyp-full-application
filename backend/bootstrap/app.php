@@ -16,14 +16,21 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // RateLimiter::for('api', function (Request $request) {
-        //     return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
-        // });
-        
-        // RateLimiter::for('login', function (Request $request) {
-        //     return Limit::perMinute(5)->by($request->ip()); // 5 login attempts per minute
-        // });
+        // Add CORS handling to API middleware group (token-based auth, no CSRF needed)
+        $middleware->api(prepend: [
+            \Illuminate\Http\Middleware\HandleCors::class,
+        ]);
+    })
+    ->booting(function () {
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
+
+        RateLimiter::for('login', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
     })->create();
+

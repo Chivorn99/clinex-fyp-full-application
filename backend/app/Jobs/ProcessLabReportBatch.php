@@ -77,9 +77,12 @@ class ProcessLabReportBatch implements ShouldQueue
         
         // Determine optimal worker count (max 3 for Google Document AI limits)
         $workerCount = min(3, $this->reportBatch->total_reports);
+
+        // Resolve Python binary: prefer python3 (Docker), fall back to python
+        $pythonPath = config('app.python_path', 'python3');
         
         $command = [
-            config('app.python_path', 'python'),
+            $pythonPath,
             $pythonScript,
             '--batch',
             $batchDirectory,
@@ -101,7 +104,38 @@ class ProcessLabReportBatch implements ShouldQueue
         $process->setTimeout(1200); // 20 minutes for large batches
         $process->setIdleTimeout(300); // 5 minutes idle timeout
 
-        $process->mustRun();
+        // Pass environment variables so Python can find credentials
+        // The .env GOOGLE_APPLICATION_CREDENTIALS is relative to the project root (e.g. 'app/google/...')
+        // storage_path() points to /var/www/html/storage, so we need storage_path(env_value)
+        $credentialsEnv = env('GOOGLE_APPLICATION_CREDENTIALS', '');
+        // Handle both 'app/google/...' and 'google/...' formats
+        $credentialsPath = str_starts_with($credentialsEnv, 'app/')
+            ? storage_path($credentialsEnv)
+            : storage_path('app/' . $credentialsEnv);
+
+        $env = array_merge(getenv() ?: [], [
+            'GOOGLE_APPLICATION_CREDENTIALS' => $credentialsPath,
+            'GOOGLE_CLOUD_PROJECT_ID' => env('GOOGLE_CLOUD_PROJECT_ID', ''),
+            'GOOGLE_CLOUD_LOCATION' => env('GOOGLE_CLOUD_LOCATION', ''),
+            'GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID' => env('GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID', ''),
+            'PADDLE_OCR_ENABLED' => env('PADDLE_OCR_ENABLED', 'false'),
+            'PADDLE_OCR_LANGUAGE' => env('PADDLE_OCR_LANGUAGE', 'ch'),
+            'PADDLE_OCR_CONFIDENCE_THRESHOLD' => env('PADDLE_OCR_CONFIDENCE_THRESHOLD', '0.85'),
+        ]);
+        $process->setEnv($env);
+
+        try {
+            $process->mustRun();
+        } catch (ProcessFailedException $e) {
+            Log::error('OCR Python script failed', [
+                'batch_id' => $this->reportBatch->id,
+                'exit_code' => $process->getExitCode(),
+                'stderr' => $process->getErrorOutput(),
+                'stdout_preview' => substr($process->getOutput(), 0, 500),
+            ]);
+            throw new \Exception('OCR script failed: ' . $process->getErrorOutput());
+        }
+
         $output = $process->getOutput();
         
         if (empty($output)) {
@@ -164,9 +198,11 @@ class ProcessLabReportBatch implements ShouldQueue
                 // Check if processing was successful
                 $isSuccess = isset($result['success']) ? $result['success'] : !isset($result['error']);
 
+
                 $updateData = [
                     'processed_at' => now(),
-                    'processing_time' => $result['processingTime'] ?? null
+                    'processing_time' => $result['processingTime'] ?? null,
+                    'raw_ocr_text' => $result['rawText'] ?? null
                 ];
 
                 if ($isSuccess) {
@@ -208,6 +244,13 @@ class ProcessLabReportBatch implements ShouldQueue
     {
         $this->reportBatch->refresh();
         
+        // Fix any reports that have extracted_data but are still marked as 'failed'
+        // (can happen from previous broken runs)
+        $this->reportBatch->labReports()
+            ->where('status', 'failed')
+            ->whereNotNull('extracted_data')
+            ->update(['status' => 'processed', 'processing_error' => null]);
+
         // Get actual counts from database
         $statusCounts = $this->reportBatch->labReports()
             ->selectRaw('status, count(*) as count')
@@ -219,10 +262,16 @@ class ProcessLabReportBatch implements ShouldQueue
         $failedCount = $statusCounts['failed'] ?? 0;
         $totalProcessed = $processedCount + $failedCount;
 
-        // Determine final status
+        // Determine final status:
+        // - 'completed' if all reports processed successfully
+        // - 'completed_with_errors' if some failed but at least one succeeded
+        // - 'failed' only if ALL reports failed (zero succeeded)
+        // - 'partial' if not all reports have been processed yet
         $finalStatus = 'completed';
         if ($totalProcessed < $this->reportBatch->total_reports) {
             $finalStatus = 'partial';
+        } elseif ($failedCount > 0 && $processedCount > 0) {
+            $finalStatus = 'completed_with_errors';
         } elseif ($failedCount > 0 && $processedCount === 0) {
             $finalStatus = 'failed';
         }

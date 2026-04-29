@@ -47,7 +47,7 @@ return [
     |
     */
 
-    'expiration' => null,
+    'expiration' => 480, // Tokens expire after 8 hours (one hospital shift)
 
     /*
     |--------------------------------------------------------------------------

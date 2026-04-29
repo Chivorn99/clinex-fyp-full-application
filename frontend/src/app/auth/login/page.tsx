@@ -6,6 +6,13 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
 
+const getErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
+    return (err as { message: string }).message
+  }
+  return fallback
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const { login } = useAuth()
@@ -35,8 +42,8 @@ export default function LoginPage() {
       } else {
         setError('Invalid response from server. Missing token or user data.')
       }
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Please try again.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Login failed. Please try again.'))
     } finally {
       setIsLoading(false)
     }

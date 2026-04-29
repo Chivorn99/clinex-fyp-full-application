@@ -2,9 +2,48 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { Search, Filter, Download, Eye, CheckCircle, XCircle, Clock, Calendar, FileText, Users, AlertTriangle } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { Search, Download, Eye, CheckCircle, Clock, Calendar, FileText, Users, AlertTriangle } from 'lucide-react'
 import { apiClient } from '@/lib/api'
+
+interface ExtractedData {
+    patientInfo?: {
+        name?: string
+    }
+}
+
+interface ApiBatch {
+    id?: number
+    name?: string
+}
+
+interface ApiReport {
+    id: number | string
+    status?: string
+    original_filename?: string
+    filename?: string
+    patient_name?: string
+    report_type?: string
+    created_at?: string
+    updated_at?: string
+    extracted_data?: ExtractedData
+    verification_status?: string
+    verified_by?: string
+    batch_id?: number | string
+    batch?: ApiBatch
+    uploader?: string
+}
+
+interface ApiError {
+    response?: {
+        status?: number
+        data?: {
+            message?: string
+        }
+    }
+    message?: string
+}
+
+const isApiError = (err: unknown): err is ApiError => typeof err === 'object' && err !== null
 
 interface Report {
     id: string
@@ -15,7 +54,7 @@ interface Report {
     processedDate: string
     status: 'verified' | 'unverified' | 'processing'
     batchId: string
-    extractedData?: any
+    extractedData?: ExtractedData
     verifiedBy?: string
     priority: 'low' | 'medium' | 'high'
     original_filename?: string
@@ -23,6 +62,7 @@ interface Report {
     created_at?: string
     updated_at?: string
     verification_status?: string
+    canVerify: boolean
     batch?: {
         id: number
         name: string
@@ -40,7 +80,6 @@ interface Batch {
 }
 
 export default function ReportsPage() {
-    const { user } = useAuth()
     const [activeTab, setActiveTab] = useState<'all' | 'verified' | 'unverified' | 'batches'>('all')
     const [searchQuery, setSearchQuery] = useState('')
     const [filterBatch, setFilterBatch] = useState('all') // Changed from filterType to filterBatch
@@ -49,20 +88,6 @@ export default function ReportsPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
     const router = useRouter()
-
-    // Fallback mock user data
-    const mockUser = {
-        name: 'Dr. Sarah Johnson',
-        email: 'sarah@smithclinic.com',
-        clinic: 'Smith Medical Clinic'
-    }
-
-    // Use auth user if available, otherwise fallback to mock
-    const currentUser = user ? {
-        name: user.name,
-        email: user.email,
-        clinic: 'Smith Medical Clinic'
-    } : mockUser
 
     // Fetch reports from API
     const fetchReports = async () => {
@@ -76,7 +101,7 @@ export default function ReportsPage() {
             console.log('📊 Response data:', response.data)
 
             // Handle response structure
-            let reportsData = []
+            let reportsData: ApiReport[] = []
             if (Array.isArray(response.data)) {
                 reportsData = response.data
             } else if (response.data?.data && Array.isArray(response.data.data)) {
@@ -91,7 +116,7 @@ export default function ReportsPage() {
             console.log('📋 Reports data:', reportsData)
 
             // Transform API data to match our interface
-            const transformedReports: Report[] = reportsData.map((report: any) => {
+            const transformedReports: Report[] = reportsData.map((report: ApiReport) => {
                 console.log('🔄 Transforming report:', report)
 
                 // Extract patient name from extracted data or use fallback
@@ -99,13 +124,25 @@ export default function ReportsPage() {
                     report.patient_name ||
                     `Patient ${report.id}`
 
-                // Determine verification status
+                const backendStatus = (report.status || '').toLowerCase()
+                const verificationStatus = (report.verification_status || '').toLowerCase()
+
+                // Determine high-level UI status
                 let status: 'verified' | 'unverified' | 'processing' = 'unverified'
-                if (report.verification_status === 'verified' || report.verified_by) {
+                if (backendStatus === 'verified' || verificationStatus === 'verified' || report.verified_by) {
                     status = 'verified'
-                } else if (report.verification_status === 'processing') {
+                } else if (
+                    backendStatus === 'processing' ||
+                    backendStatus === 'uploaded'
+                ) {
                     status = 'processing'
                 }
+                // 'processed' and 'failed' remain as 'unverified' (ready for verification)
+
+                // Only processed, not-yet-verified reports should expose Verify actions.
+                const canVerify =
+                    status === 'unverified' &&
+                    backendStatus === 'processed'
 
                 // Extract batch info
                 const batchId = report.batch?.id?.toString() ||
@@ -131,6 +168,7 @@ export default function ReportsPage() {
                     created_at: report.created_at,
                     updated_at: report.updated_at,
                     verification_status: report.verification_status,
+                    canVerify,
                     batch: {
                         id: parseInt(batchId),
                         name: batchName
@@ -156,18 +194,18 @@ export default function ReportsPage() {
             console.log('📦 Available batches:', uniqueBatches)
             setAvailableBatches(uniqueBatches)
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('💥 Failed to fetch reports:', err)
-            console.error('📝 Error details:', err.response?.data)
+            console.error('📝 Error details:', isApiError(err) ? err.response?.data : err)
 
             let errorMessage = 'Failed to load reports'
-            if (err.response?.status === 401) {
+            if (isApiError(err) && err.response?.status === 401) {
                 errorMessage = 'Authentication failed. Please log in again.'
-            } else if (err.response?.status === 403) {
+            } else if (isApiError(err) && err.response?.status === 403) {
                 errorMessage = 'You do not have permission to view reports'
-            } else if (err.response?.data?.message) {
+            } else if (isApiError(err) && err.response?.data?.message) {
                 errorMessage = err.response.data.message
-            } else if (err.message) {
+            } else if (isApiError(err) && err.message) {
                 errorMessage = err.message
             }
 
@@ -324,6 +362,11 @@ export default function ReportsPage() {
         router.push(`/main/reports/report-details?id=${reportId}`)
     }
 
+    const handleVerifyReport = (report: Report) => {
+        const queryBatchId = report.batch?.id || report.batchId
+        router.push(`/main/verification?batchId=${queryBatchId}&reportId=${report.id}`)
+    }
+
     if (loading) {
         return (
             <DashboardLayout>
@@ -406,15 +449,15 @@ export default function ReportsPage() {
                 <div className="bg-white shadow rounded-lg">
                     <div className="border-b border-gray-200">
                         <nav className="-mb-px flex space-x-8 px-6">
-                            {[
+                            {([
                                 { key: 'all', label: 'All Reports', count: stats.total },
                                 { key: 'verified', label: 'Verified', count: stats.verified },
                                 { key: 'unverified', label: 'Unverified', count: stats.unverified },
                                 { key: 'batches', label: 'Batch History', count: batches.length }
-                            ].map((tab) => (
+                            ] as Array<{ key: 'all' | 'verified' | 'unverified' | 'batches'; label: string; count: number }>).map((tab) => (
                                 <button
                                     key={tab.key}
-                                    onClick={() => setActiveTab(tab.key as any)}
+                                    onClick={() => setActiveTab(tab.key)}
                                     className={`${activeTab === tab.key
                                         ? 'border-blue-500 text-blue-600'
                                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -484,9 +527,9 @@ export default function ReportsPage() {
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Processed Date
                                         </th>
-                                        {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Actions
-                                        </th> */}
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -524,7 +567,7 @@ export default function ReportsPage() {
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                 {formatDate(report.processedDate)}
                                             </td>
-                                            {/* <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                 <div className="flex space-x-2">
                                                     <button
                                                         onClick={(e) => {
@@ -536,15 +579,20 @@ export default function ReportsPage() {
                                                     >
                                                         <Eye className="h-4 w-4" />
                                                     </button>
-                                                    <button
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        className="text-green-600 hover:text-green-900"
-                                                        title="Download Report"
-                                                    >
-                                                        <Download className="h-4 w-4" />
-                                                    </button>
+                                                    {report.canVerify && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleVerifyReport(report)
+                                                            }}
+                                                            className="text-green-600 hover:text-green-900"
+                                                            title="Verify Report"
+                                                        >
+                                                            <CheckCircle className="h-4 w-4" />
+                                                        </button>
+                                                    )}
                                                 </div>
-                                            </td> */}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>

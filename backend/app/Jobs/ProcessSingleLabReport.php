@@ -40,8 +40,11 @@ class ProcessSingleLabReport implements ShouldQueue
             // Use the optimized Python script
             $pythonScript = base_path('scripts/python/document_ocr.py');
 
+            // Resolve Python binary: prefer python3 (Docker), fall back to python
+            $pythonPath = config('app.python_path', 'python3');
+
             $command = [
-                config('app.python_path', 'python'),
+                $pythonPath,
                 $pythonScript,
                 '--file',
                 $filePath,
@@ -57,6 +60,24 @@ class ProcessSingleLabReport implements ShouldQueue
 
             $process = new Process($command);
             $process->setTimeout(180); // 3 minutes per file
+
+            // Pass environment variables so Python can find credentials
+            $credentialsEnv = env('GOOGLE_APPLICATION_CREDENTIALS', '');
+            $credentialsPath = str_starts_with($credentialsEnv, 'app/')
+                ? storage_path($credentialsEnv)
+                : storage_path('app/' . $credentialsEnv);
+
+            $env = array_merge(getenv() ?: [], [
+                'GOOGLE_APPLICATION_CREDENTIALS' => $credentialsPath,
+                'GOOGLE_CLOUD_PROJECT_ID' => env('GOOGLE_CLOUD_PROJECT_ID', ''),
+                'GOOGLE_CLOUD_LOCATION' => env('GOOGLE_CLOUD_LOCATION', ''),
+                'GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID' => env('GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID', ''),
+                'PADDLE_OCR_ENABLED' => env('PADDLE_OCR_ENABLED', 'false'),
+                'PADDLE_OCR_LANGUAGE' => env('PADDLE_OCR_LANGUAGE', 'ch'),
+                'PADDLE_OCR_CONFIDENCE_THRESHOLD' => env('PADDLE_OCR_CONFIDENCE_THRESHOLD', '0.85'),
+            ]);
+            $process->setEnv($env);
+
             $process->mustRun();
             $output = $process->getOutput();
 
@@ -82,6 +103,7 @@ class ProcessSingleLabReport implements ShouldQueue
                 'processing_time' => $result['processingTime'] ?? null,
                 'status' => $isSuccess ? 'processed' : 'failed',
                 'extracted_data' => $isSuccess ? $result : null,
+                'raw_ocr_text' => $isSuccess ? ($result['rawText'] ?? null) : ($result['rawText'] ?? null),
                 'processing_error' => $isSuccess ? null : ($result['error'] ?? 'Unknown error'),
             ];
 

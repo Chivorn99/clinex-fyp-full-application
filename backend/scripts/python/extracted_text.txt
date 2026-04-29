@@ -1,0 +1,96 @@
+werings Feat
+mas
+sina 625
+KV Hospital
+K+
+ñšaj šunɲmist npmůdy:wimuziñpo shijm:qñonviná vůjungınınnkonu
+bniswu:qui:máquumïñ êquñsang :[n:im:) imwņsminümü äíîñ¤áƒš
+iņináciu nájs ķu µmw äñjs is instru
+HOSPITAL
+min:/Name
+: HONG HOEN
+in tij/Age
+: 38 Y
+In 9/Gender
+: Female
+Patient ID
+: PT001876
+Lab ID
+: LT001239
+iņ/Phone
+: 015624037
+Requested Date
+18/03/2024 08:08
+Collected Date
+: 18/03/2024 08:44
+Analysis Date
+18/03/2024 08:44
+Requested By
+: Dr. ENG Hunchhay
+LABORATORY REPORT
+HEMATOLOGY
+Results
+Unit
+Reference Range
+Flag
+CBC
+WBC
+:
+9.4
+10⁹/L
+(3.5-10.0)
+LYM%
+:
+39.4
+OP
+(15.0-50.0)
+MONO%
+:
+6.8
+09
+(2.0-15.0)
+NUE%
+:
+53.8
+%0
+(35.0-80.0)
+EOSINO%
+:
+12.9
+응
+(11.5-16.5)
+BASO%
+: 26.8
+09
+25.0-35.0)
+HGB
+:
+36.0
+g/dL
+(31.0-38.0)
+MCH
+:
+4.83
+pg
+(3.50-5.50)
+MCHC
+: 75.0
+g/dL
+(75.0-100.0)
+RBC
+: 36.0
+x1012/L
+(35.0-55.0)
+MCV
+:
+294
+fl
+(150-400)
+Validated By:
+Lab Technician:
+b
+ths
+2024-03-18 08:52
+2024-03-18 08:52
+mawgs: qûqnfumi wjšinēšu vynnjaw tannjaw (oywňanskunjom 5 ñ.8)
+i₪açıšņ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70

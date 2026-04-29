@@ -5,6 +5,13 @@ import { Eye, EyeOff, Mail, Lock, User, Building2, Check, X } from 'lucide-react
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api'
 
+const getErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
+    return (err as { message: string }).message
+  }
+  return fallback
+}
+
 export default function SignUpPage() {
   const router = useRouter()
   const [formData, setFormData] = useState({
@@ -12,6 +19,7 @@ export default function SignUpPage() {
     clinicName: '',
     email: '',
     password: '',
+    role: 'lab_technician',
   })
   const [showPassword, setShowPassword] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
@@ -44,11 +52,12 @@ export default function SignUpPage() {
     setSuccess('')
 
     try {
-      const response = await apiClient.post('/register', {
+      await apiClient.post('/register', {
         name: formData.fullName,
         email: formData.email,
         password: formData.password,
         password_confirmation: formData.password,
+        role: formData.role,
       })
 
       setSuccess('Account created successfully! Redirecting to login...')
@@ -57,8 +66,8 @@ export default function SignUpPage() {
         router.push('/auth/login')
       }, 2000)
 
-    } catch (err: any) {
-      setError(err.message || 'Registration failed. Please try again.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Registration failed. Please try again.'))
     } finally {
       setIsLoading(false)
     }

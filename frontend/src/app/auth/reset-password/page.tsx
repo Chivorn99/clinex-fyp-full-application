@@ -5,6 +5,13 @@ import { Mail, ArrowLeft, Send } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api'
 
+const getErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
+    return (err as { message: string }).message
+  }
+  return fallback
+}
+
 export default function ResetPasswordPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -30,8 +37,8 @@ export default function ResetPasswordPage() {
       } else {
         setError(response.message || 'Failed to send OTP')
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to send OTP. Please try again.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to send OTP. Please try again.'))
     } finally {
       setIsLoading(false)
     }
@@ -49,7 +56,7 @@ export default function ResetPasswordPage() {
               Check Your Email
             </h2>
             <p className="text-gray-600">
-              We've sent a 6-digit verification code to
+              We&apos;ve sent a 6-digit verification code to
             </p>
             <p className="font-medium text-blue-600">{email}</p>
             <p className="text-sm text-gray-500 mt-4">
@@ -72,7 +79,7 @@ export default function ResetPasswordPage() {
             Reset Your Password
           </h2>
           <p className="text-gray-600">
-            Enter your email address and we'll send you a verification code
+            Enter your email address and we&apos;ll send you a verification code
           </p>
         </div>
 

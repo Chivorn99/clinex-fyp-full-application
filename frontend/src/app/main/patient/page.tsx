@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import {User,Phone,Calendar,FileText,Search,Filter,Eye,ChevronRight,Users,Activity,Clock,UserCheck,Download,RefreshCw,AlertCircle,CheckCircle,XCircle} from 'lucide-react'
@@ -69,6 +69,16 @@ interface PatientLabReport {
     } | null
 }
 
+interface ApiError {
+    response?: {
+        data?: {
+            message?: string
+        }
+    }
+}
+
+const isApiError = (err: unknown): err is ApiError => typeof err === 'object' && err !== null
+type ExtractedTest = PatientLabReport['extracted_data'][number]
 export default function PatientPage() {
     const router = useRouter()
 
@@ -87,13 +97,8 @@ export default function PatientPage() {
     const [loadingReports, setLoadingReports] = useState(false)
     const [showPatientModal, setShowPatientModal] = useState(false)
     const [reportsPagination, setReportsPagination] = useState<PaginationData | null>(null)
-    const [currentReportsPage, setCurrentReportsPage] = useState(1)
 
-    useEffect(() => {
-        fetchPatients()
-    }, [currentPage, searchTerm, selectedGender])
-
-    const fetchPatients = async () => {
+    const fetchPatients = useCallback(async () => {
         try {
             setLoading(true)
             setError('')
@@ -135,15 +140,23 @@ export default function PatientPage() {
                 throw new Error('Invalid response structure')
             }
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('💥 Failed to fetch patients:', err)
-            setError(err.response?.data?.message || 'Failed to fetch patients')
+            if (isApiError(err) && err.response?.data?.message) {
+                setError(err.response.data.message)
+            } else {
+                setError('Failed to fetch patients')
+            }
         } finally {
             setLoading(false)
         }
-    }
+    }, [currentPage, searchTerm, selectedGender])
 
-    const fetchPatientReports = async (patientId: number, page: number = 1) => {
+    useEffect(() => {
+        fetchPatients()
+    }, [fetchPatients])
+
+    const fetchPatientReports = useCallback(async (patientId: number, page: number = 1) => {
         try {
             setLoadingReports(true)
 
@@ -170,7 +183,7 @@ export default function PatientPage() {
                 throw new Error('Invalid response structure')
             }
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('💥 Failed to fetch patient reports:', err)
             // Don't show error for no reports, just show empty state
             setPatientReports([])
@@ -178,11 +191,10 @@ export default function PatientPage() {
         } finally {
             setLoadingReports(false)
         }
-    }
+    }, [])
 
     const handlePatientClick = async (patient: Patient) => {
         setSelectedPatient(patient)
-        setCurrentReportsPage(1)
         setShowPatientModal(true)
         await fetchPatientReports(patient.id, 1)
     }
@@ -193,7 +205,6 @@ export default function PatientPage() {
 
     const handleReportsPageChange = async (page: number) => {
         if (selectedPatient) {
-            setCurrentReportsPage(page)
             await fetchPatientReports(selectedPatient.id, page)
         }
     }
@@ -201,14 +212,12 @@ export default function PatientPage() {
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault()
         setCurrentPage(1)
-        fetchPatients()
     }
 
     const handleRefresh = () => {
         setCurrentPage(1)
         setSearchTerm('')
         setSelectedGender('')
-        fetchPatients()
     }
 
     const formatDate = (dateString: string | null) => {
@@ -253,7 +262,7 @@ export default function PatientPage() {
     }
 
     // Group test results by category
-    const groupTestsByCategory = (tests: any[]) => {
+    const groupTestsByCategory = (tests: ExtractedTest[]) => {
         return tests.reduce((acc, test) => {
             const category = test.category || 'UNCATEGORIZED'
             if (!acc[category]) {
@@ -261,7 +270,7 @@ export default function PatientPage() {
             }
             acc[category].push(test)
             return acc
-        }, {} as Record<string, any[]>)
+        }, {} as Record<string, ExtractedTest[]>)
     }
 
     const renderPagination = (paginationData: PaginationData, onPageChange: (page: number) => void) => {
@@ -683,7 +692,7 @@ export default function PatientPage() {
                                                     <div className="text-center py-8">
                                                         <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                                                         <h3 className="text-lg font-medium text-gray-900 mb-2">No Lab Reports</h3>
-                                                        <p className="text-gray-500">This patient doesn't have any lab reports yet.</p>
+                                                        <p className="text-gray-500">This patient doesn&apos;t have any lab reports yet.</p>
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-4">
@@ -734,7 +743,7 @@ export default function PatientPage() {
                                                                                     </div>
                                                                                     <div className="p-3">
                                                                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                                                                            {(tests as any[]).map((test: any) => (
+                                                                                            {tests.map((test) => (
                                                                                                 <div key={test.id} className="text-xs">
                                                                                                     <div className="font-medium text-gray-900">{test.test_name}</div>
                                                                                                     <div className="text-gray-600">

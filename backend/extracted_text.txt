@@ -1,318 +1,104 @@
-ន្ទីរពេទ្យ
-K+
-62
-HOSPITAL
-032
-មន្ទីរពេទ្យ ខវី
+erine i20
+sina 625
 KV Hospital
-ពិនិត្យ និងព្យាបាលជំងឺទូទៅ ព្យាបាលជំងឺស្ទះសរសៃឈាមខួរក្បាល និងគ្រោះថ្នាក់ចរាចរណ៍ មជ្ឈមណ្ឌលលាងឈាម
-ឯកទេសបេះដូង វះកាត់ដុំមហារីក និងប្រព័ន្ធប្រសាទ ឆ្លុះក្រពះពោះវៀន ដោយគ្មានការឈឺចាប់ ម៉ាស៊ីនពិនិត្យសុដន់
-អេកូមើលសាច់ថ្លើម ម៉ាស៊ីន អឹម អ អាយ ម៉ាស៊ីន ស៊ី ធី ស្កែន និងមានសេវា ប.ស.ស៕
-in:/Name
-Patient ID
-: Thai Dara
-: PT002050
-Collected Date
-: 31/03/2024 12:58
-In tij/Age
-Lab ID
-Analysis Date
-: 30 Y, 1 M, 4 D
-: LT001352
-: 31/03/2024 12:58
-ភេទ/Gender
-Requested Date
-Requested By
+Qe
+K+
+àŝaj shopmuziei nɲmåj:winüzikpo shijm:qñünüiná vajunnnnnkninu
+bniswiu:qui:máquumïñ shquñsans :[n:im:i)s imwņsminümü äíîñ¤áƒš
+iņu žājs ķu µ mw ¦ājs ñ fins šumstrunu.ƒ‚Âƒ³º¶
+HOSPITAL
+min:/Name
+: HENG VANNAT
+ni/Age
+: 35 Y, 1 D
+In 9/Gender
 : Male
-: 31/03/2024 09:46
-: Dr. LEANG Choeu
+Patient ID
+: PT001772
+Lab ID
+: LT001177
+in/Phone
+: 060991736
+Requested Date
+11/03/2024 00:49
+Collected Date
+: 11/03/2024 09:09
+Analysis Date
+: 11/03/2024 09:09
+Requested By
+: Dr. Neak Bunteum
 LABORATORY REPORT
 BIOCHIMISTRY
 Results
 Unit
 Reference Range
 Flag
-Creatinine, serum
-:
-1.0
+Creatinine,
+serum
+: 0.8
 mg/dL
-(0.9
-1.1)
+(0.9 1.1)
+L
 Urea/BUN
 :
-20
+31
 mg/dL
-(6.0
-40.0 )
+(6.0 40.0 )
 Glucose
 :
-82
+130
 mg/dL
 (75-115)
+H H
 Cholesterole Total
-: 190
+: 281
 mg/dL
 (0 - 200)
 Cholesterol-HDL
-: 45
+:
+65
 mg/dL
 (>60)
-L
 Cholesterol-LDL
-:
-85
+: 165
 mg/dL
-(0 150)
+(0 - 150)
+Н
+H H
 Tryglyceride
-: 383
+:
+494
 mg/dL
-(0
-150)
-H
+(0 - 150)
 Uric acide
-: 5.7
+: 5.5
 mg/dL
--
-(3.5 6.0)
+(3.5 - 6.0)
 ENZYMOLOGY
 Results
 Unit
 Reference Range
 Flag
-GGT (Gamm Glutamyl Transferas): 44
+GGT (Gamm Glutamyl Transferas): 269
 U/L
-( 0 - 55 )
+(0 - 55 )
+H
+IT!
 TRANSAMINASE
 SGPT/ALT
-SGOT/AST
-:
-37
+126
 U/L
-(0 41)
-:
-27
+(0 - 41)
+H H
+SGOT/AST
+56
 U/L
 (0 - 40)
 Validated By:
-2024-03-31 13:00
 Lab Technician:
-سے
-ហុក ម៉េងឆាយ
-2024-03-31 13:00
-អាសយដ្ឋាន: ភូមិទួលវិហារ ឃុំជីរោទ៍ទី២ ស្រុកត្បូងឃុំ ខេត្តត្បូងឃុំ (ចម្ងាយពីស្ពានគីហ្សូណា ៦ គ.ម)
-î₪çîñḥ: 097 840 47 89/012 89 17 45/012 28 60 70
-ន្ទីរពេទ្យ
-HOSPITAL
-032
-មន្ទីរពេទ្យ ខវី
-KV Hospital
-ពិនិត្យ និងព្យាបាលជំងឺទូទៅ ព្យាបាលជំងឺស្ទះសរសៃឈាមខួរក្បាល និងគ្រោះថ្នាក់ចរាចរណ៍ មជ្ឈមណ្ឌលលាងឈាម
-ឯកទេសបេះដូង វះកាត់ដុំមហារីក និងប្រព័ន្ធប្រសាទ ឆ្លុះក្រពះពោះវៀន ដោយគ្មានការឈឺចាប់ ម៉ាស៊ីនពិនិត្យសុដន់
-អេកូមើលសាច់ថ្លើម ម៉ាស៊ីន អឹម អ អាយ ម៉ាស៊ីន ស៊ី ធី ស្កែន និងមានសេវា ប.ស.ស៕
-ឈោ្មះ/Name
-Patient ID
-: Thai Dara
-: PT002050
-អាយុ/Age
-: 30 Y, 1 M, 4 D
-Collected Date
-: 31/03/2024 12:58
-Lab ID
-Analysis Date
-: LT001352
-: 31/03/2024 12:58
-ភេទ/Gender
-Requested Date
-Requested By
-: Male
-: 31/03/2024 09:46
-: Dr. LEANG Choeu
-LABORATORY REPORT
-DRUG URINE
-Results
-Unit
-Reference Range
-Flag
-: NEGATIVE
-: NEGATIVE
-Morphine
-Amphetamine
-Metamphetamine
-: NEGATIVE
-Validated By:
-2024-03-31 13:00
-Lab Technician:
-ហុក ម៉េងឆាយ
-2024-03-31 13:00
-អាសយដ្ឋាន: ភូមិទួលវិហារ ឃុំជីរោទ៍ទី២ ស្រុកត្បូងឃុំ ខេត្តត្បូងឃុំ (ចម្ងាយពីស្ពានគីហ្សូណា ៦ គ.ម)
-លេខទូរស័ព្ទ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
-ន្ទីរពេទ្យ
-HOSPITAL
-032
-មន្ទីរពេទ្យ ខវី
-KV Hospital
-ពិនិត្យ និងព្យាបាលជំងឺទូទៅ ព្យាបាលជំងឺស្ទះសរសៃឈាមខួរក្បាល និងគ្រោះថ្នាក់ចរាចរណ៍ មជ្ឈមណ្ឌលលាងឈាម
-ឯកទេសបេះដូង វះកាត់ដុំមហារីក និងប្រព័ន្ធប្រសាទ ឆ្លុះក្រពះពោះវៀន ដោយគ្មានការឈឺចាប់ ម៉ាស៊ីនពិនិត្យសុដន់
-អេកូមើលសាច់ថ្លើម ម៉ាស៊ីន អឹម អ អាយ ម៉ាស៊ីន ស៊ី ធី ស្កែន និងមានសេវា ប.ស.ស៕
-ឈោ្មះ/Name
-Patient ID
-: Thai Dara
-: PT002050
-អាយុ/Age
-: 30 Y, 1 M, 4 D
-Collected Date
-: 31/03/2024 12:58
-Lab ID
-Analysis Date
-: LT001352
-: 31/03/2024 12:58
-ភេទ/Gender
-Requested Date
-Requested By
-: Male
-: 31/03/2024 09:46
-: Dr. LEANG Choeu
-LABORATORY REPORT
-HEMATOLOGY
-Results
-Unit
-Reference Range
-Flag
-CBC
-WBC
-LYM%
-: 9.4
-109/L
-(3.5-10.0)
-:
-39.1
-응
-(15.0-50.0)
-MONO%
-:
-8.3
-응
-(2.0-15.0)
-NUE%
-:
-52.6
-응
-(35.0-80.0)
-EOSINO%
-:
-12.4
-응
-(11.5-16.5)
-BASO%
-: 21.7
-응
-(25.0-35.0)
-L
-HGB
-:
-36.4
-g/dL
-(31.0-38.0)
-MCH
-: 5.70
-pg
-(3.50-5.50)
-H
-MCHC
-:
-59.7
-g/dL
-(75.0-100.0)
-L
-RBC
-: 34.1
-X1012/L
-(35.0-55.0)
-L
-MCV
-: 293
-f1
-(150-400)
-Validated By:
-2024-03-31 13:00
-Lab Technician:
-ហុក ម៉េងឆាយ
-2024-03-31 13:00
-អាសយដ្ឋាន: ភូមិទួលវិហារ ឃុំជីរោទ៍ទី២ ស្រុកត្បូងឃុំ ខេត្តត្បូងឃុំ (ចម្ងាយពីស្ពានគីហ្សូណា ៦ គ.ម)
-លេខទូរស័ព្ទ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
-ន្ទីរពេទ្យ
-HOSPITAL
-ឈោ្មះ/Name
-Patient ID
-032
-មន្ទីរពេទ្យ ខវី
-KV Hospital
-ពិនិត្យ និងព្យាបាលជំងឺទូទៅ ព្យាបាលជំងឺស្ទះសរសៃឈាមខួរក្បាល និងគ្រោះថ្នាក់ចរាចរណ៍ មជ្ឈមណ្ឌលលាងឈាម
-ឯកទេសបេះដូង វះកាត់ដុំមហារីក និងប្រព័ន្ធប្រសាទ ឆ្លុះក្រពះពោះវៀន ដោយគ្មានការឈឺចាប់ ម៉ាស៊ីនពិនិត្យសុដន់
-អេកូមើលសាច់ថ្លើម ម៉ាស៊ីន អឹម អ អាយ ម៉ាស៊ីន ស៊ី ធី ស្កែន និងមានសេវា ប.ស.ស៕
-: Thai Dara
-: PT002050
-អាយុ/Age
-: 30 Y, 1 M, 4 D
-Collected Date
-: 31/03/2024 12:58
-Lab ID
-Analysis Date
-: LT001352
-: 31/03/2024 12:58
-ភេទ/Gender
-Requested Date
-Requested By
-: Male
-: 31/03/2024 09:46
-: Dr. LEANG Choeu
-LABORATORY REPORT
-URINE ANALYSIS
-Results
-Unit
-Reference Range
-Flag
-URINE ANALYSIS 11 TEST
-LEU
-: NEGATIVE
-Leu/μL
-NIT
-:
-NEGATIVE
-URO
-:
-0.2
-mg/dL
-PRO
-:
-NEGATIVE
-mg/dL
-PH
-:
-6.5
-BLO
-:
-NEGATIVE
-Ery/μl
-SG
-:
-1.010
-KET
-: NEGATIVE
-mg/dL
-BIL
-: NEGATIVE
-mg/dL
-GLU
-: NEGATIVE
-mg/dL
-ASC
-: NEGATIVE
-mg/dL
-Validated By:
-2024-03-31 13:00
-Lab Technician:
-ហុក ម៉េងឆាយ
-2024-03-31 13:00
-អាសយដ្ឋាន: ភូមិទួលវិហារ ឃុំជីរោទ៍ទី២ ស្រុកត្បូងឃុំ ខេត្តត្បូងឃុំ (ចម្ងាយពីស្ពានគីហ្សូណា ៦ គ.ម)
-លេខទូរស័ព្ទ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
+b
+the
+2024-03-11 09:12
+2024-03-11 09:12
+mawgs: qûqniumi wijdinēšu vynnjaw tannjaw (oywňanskunjom 5 ñ.8)
+î₪açıšņ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
