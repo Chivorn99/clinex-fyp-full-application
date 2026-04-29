@@ -105,8 +105,16 @@ class ProcessLabReportBatch implements ShouldQueue
         $process->setIdleTimeout(300); // 5 minutes idle timeout
 
         // Pass environment variables so Python can find credentials
+        // The .env GOOGLE_APPLICATION_CREDENTIALS is relative to the project root (e.g. 'app/google/...')
+        // storage_path() points to /var/www/html/storage, so we need storage_path(env_value)
+        $credentialsEnv = env('GOOGLE_APPLICATION_CREDENTIALS', '');
+        // Handle both 'app/google/...' and 'google/...' formats
+        $credentialsPath = str_starts_with($credentialsEnv, 'app/')
+            ? storage_path($credentialsEnv)
+            : storage_path('app/' . $credentialsEnv);
+
         $env = array_merge(getenv() ?: [], [
-            'GOOGLE_APPLICATION_CREDENTIALS' => storage_path('app/' . config('services.google.credentials_path', env('GOOGLE_APPLICATION_CREDENTIALS', ''))),
+            'GOOGLE_APPLICATION_CREDENTIALS' => $credentialsPath,
             'GOOGLE_CLOUD_PROJECT_ID' => env('GOOGLE_CLOUD_PROJECT_ID', ''),
             'GOOGLE_CLOUD_LOCATION' => env('GOOGLE_CLOUD_LOCATION', ''),
             'GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID' => env('GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID', ''),
@@ -189,6 +197,7 @@ class ProcessLabReportBatch implements ShouldQueue
 
                 // Check if processing was successful
                 $isSuccess = isset($result['success']) ? $result['success'] : !isset($result['error']);
+
 
                 $updateData = [
                     'processed_at' => now(),

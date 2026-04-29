@@ -62,8 +62,13 @@ class ProcessSingleLabReport implements ShouldQueue
             $process->setTimeout(180); // 3 minutes per file
 
             // Pass environment variables so Python can find credentials
+            $credentialsEnv = env('GOOGLE_APPLICATION_CREDENTIALS', '');
+            $credentialsPath = str_starts_with($credentialsEnv, 'app/')
+                ? storage_path($credentialsEnv)
+                : storage_path('app/' . $credentialsEnv);
+
             $env = array_merge(getenv() ?: [], [
-                'GOOGLE_APPLICATION_CREDENTIALS' => storage_path('app/' . env('GOOGLE_APPLICATION_CREDENTIALS', '')),
+                'GOOGLE_APPLICATION_CREDENTIALS' => $credentialsPath,
                 'GOOGLE_CLOUD_PROJECT_ID' => env('GOOGLE_CLOUD_PROJECT_ID', ''),
                 'GOOGLE_CLOUD_LOCATION' => env('GOOGLE_CLOUD_LOCATION', ''),
                 'GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID' => env('GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID', ''),
