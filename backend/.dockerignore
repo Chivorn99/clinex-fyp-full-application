@@ -8,5 +8,7 @@ storage/framework/cache
 storage/framework/sessions
 storage/framework/views
 storage/app/google
+storage/app/private
+storage/app/public
 public/build
 public/hot
