@@ -99,7 +99,9 @@ def _select_paddle_device(paddle_config: Dict[str, Any]) -> str:
         return 'cpu'
     if device in {'gpu', 'cuda', 'auto'}:
         return gpu_device
-    return gpu_device
+    # Unknown value — default to CPU for safety
+    print(f'DEBUG: Unknown PADDLE_OCR_DEVICE value "{device}", defaulting to CPU', file=sys.stderr)
+    return 'cpu'
 
 
 def _get_kiri_config() -> Dict[str, Any]:
