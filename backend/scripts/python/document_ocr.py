@@ -476,12 +476,13 @@ def _fuse_ocr_texts(paddle_text: str, paddle_confidence: float,
 class OptimizedLabReportParser:
     def __init__(self):
         self.failed_patterns = []
+        # Field keys — include English-only variants so garbled Khmer prefixes still match
         self.patient_fields = {
-            'name': ['ឈោ្មះ/Name', 'in:/Name', 'nin:/Name'],
+            'name': ['ឈោ្មះ/Name', '/Name', 'Name'],
             'patient_id': ['Patient ID'],
-            'age': ['អាយុ/Age'],
-            'gender': ['ភេទ/Gender'],
-            'phone': ['ទូរស័ព្ទ/Phone', 'លេខទូរស័ព្ទ']
+            'age': ['អាយុ/Age', '/Age', 'Age'],
+            'gender': ['ភេទ/Gender', '/Gender', 'Gender'],
+            'phone': ['ទូរស័ព្ទ/Phone', 'លេខទូរស័ព្ទ', '/Phone', 'Phone']
         }
         self.lab_fields = {
             'lab_id': ['Lab ID'],
@@ -492,25 +493,75 @@ class OptimizedLabReportParser:
             'validated_by': ['Lab Technician', 'Validated By']
         }
         self.all_field_keys = set(sum(self.patient_fields.values(), []) + sum(self.lab_fields.values(), []))
+
+        # Map to normalise garbled keys like 'min:/Name' → '/Name'
+        # Matches any line ending with /EnglishLabel
+        self._english_suffix_re = re.compile(r'[/](Name|Age|Gender|Phone)$', re.IGNORECASE)
+
         self.compiled_patterns = {
-            'name': re.compile(r'ឈោ្មះ/Name\s*:\s*([^\W\d_][^\n]*?)(?=\s*(?:Patient|អាយុ|Lab|\n|$))', re.UNICODE),
-            'patient_id': re.compile(r'Patient ID\s*:\s*(PT\d+)'),
-            'age': re.compile(r'អាយុ/Age\s*:\s*(\d+\s*Y(?:,\s*\d+\s*M)?(?:,\s*\d+\s*D)?)'),
-            'gender': re.compile(r'ភេទ/Gender\s*:\s*(Male|Female)'),
-            'phone': re.compile(r'(?:ទូរស័ព្ទ/Phone|លេខទូរស័ព្ទ)\s*:\s*(0\d{8,9})?'),
-            'lab_id': re.compile(r'Lab ID\s*:\s*(LT\d+)'),
-            'requested_by': re.compile(r'Requested By\s*:\s*(Dr\.\s*[^\W\d_][^\n]*?)(?=\s*(?:Collected|Analysis|Lab|\n|$))', re.UNICODE),
-            'requested_date': re.compile(r'Requested Date\s*:\s*(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})'),
-            'collected_date': re.compile(r'Collected Date\s*:\s*(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})'),
-            'analysis_date': re.compile(r'Analysis Date\s*:\s*(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})'),
-            'validated_by': re.compile(r'(?:Lab Technician|Validated By)\s*:\s*.*?([\u1780-\u17FF\s]+)(?=\s*(?:202[34]|\n|$))', re.UNICODE),
-            'category': re.compile(r'\b(BIOCH(?:I|E)MISTRY|ENZYMOLOGY|HEMATOLOGY|SERO\s*/?\s*IMMUNOLOGY|URINE\s*ANALYSIS|DRUG\s*URINE)\b', re.IGNORECASE),
+            # --- Patient fields: use .*?/Name so garbled Khmer prefix is ignored ---
+            'name': re.compile(
+                r'(?:.*?/)Name\s*:?\s*\n?:?\s*([A-Z][A-Za-z\s.]+?)'
+                r'(?=\s*(?:Patient|/Age|\n|$))',
+                re.UNICODE | re.MULTILINE
+            ),
+            'patient_id': re.compile(r'Patient\s*ID\s*:?\s*\n?:?\s*(PT\d+)'),
+            'age': re.compile(
+                r'(?:.*?/)Age\s*:?\s*\n?:?\s*(\d+\s*Y(?:[,.]?\s*\d+\s*M)?(?:[,.]?\s*\d+\s*D)?)',
+                re.MULTILINE
+            ),
+            'gender': re.compile(
+                r'(?:.*?/)Gender\s*:?\s*\n?:?\s*(Male|Female)',
+                re.IGNORECASE | re.MULTILINE
+            ),
+            'phone': re.compile(
+                r'(?:.*?/)Phone\s*:?\s*\n?:?\s*(0\d{8,9})',
+                re.MULTILINE
+            ),
+            # --- Lab fields (English-only, already mostly working) ---
+            'lab_id': re.compile(r'Lab\s*ID\s*:?\s*\n?:?\s*(LT\d+)'),
+            'requested_by': re.compile(
+                r'Requested\s*By\s*:?\s*\n?:?\s*(Dr\.?\s*[A-Za-z\s.]+?)'
+                r'(?=\s*(?:Collected|Analysis|Lab|LABORATORY|\n|$))',
+                re.UNICODE | re.MULTILINE
+            ),
+            'requested_date': re.compile(
+                r'Requested\s*Date\s*:?\s*\n?:?\s*(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})'
+            ),
+            'collected_date': re.compile(
+                r'Collected\s*Date\s*:?\s*\n?:?\s*(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})'
+            ),
+            'analysis_date': re.compile(
+                r'Analysis\s*Date\s*:?\s*\n?:?\s*(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})'
+            ),
+            # Validated By — try to grab the name on same or next line
+            'validated_by': re.compile(
+                r'(?:Lab\s*Technician|Validated\s*By)\s*:?\s*\n?'
+                r'([\u1780-\u17FF\sA-Za-z.]+?)'
+                r'(?=\s*(?:202[3-9]|\n|$))',
+                re.UNICODE | re.MULTILINE
+            ),
+            'category': re.compile(
+                r'\b(BIOCH(?:I|E)MISTRY|ENZYMOLOGY|HEMATOLOGY|'
+                r'SERO\s*/?\s*IMMUNOLOGY|URINE\s*ANALYSIS|DRUG\s*URINE|'
+                r'ABO\s*Blood\s*Group)\b',
+                re.IGNORECASE
+            ),
             'test_row': re.compile(
-                r'^(?P<test_name>(?:Creatinine,?\s*serum|Urea/BUN|Glucose|Cholesterole?\s*Total|Cholesterol-HDL|Cholesterol-LDL|Tryglyceride|Uric\s*acide|GGT\s*\(Gamm\s*Glutamyl\s*Transferas\)|SGPT/ALT|SGOT/AST|Morphine|Amphetamine|Metamphetamine|WBC|LYM%|MONO%|NUE%|EOSINO%|BASO%|HGB|MCH|MCHC|RBC|MCV|LEU|NIT|URO|PRO|PH|BLO|SG|KET|BIL|GLU|ASC))\s*:?\s*'
-                r'(?P<result>\d+\.?\d*|NEGATIVE|POSITIVE)\s*'
-                r'(?P<flag>[HL])?\s*'
-                r'(?P<unit>(?:mg/dL|U/L|%|\$U/L\$|g/dL|Leu/µL|Ery/pl|x1012/L|fl|\$10\^\{9\}/L\$|pg)?)?\s*'
-                r'(?P<reference_range>(?:\([^)]+\)|\$\([^)]+\)\$)?)?$',
+                r'^(?P<test_name>(?:Creatinine,?\s*serum|Urea/BUN|Glucose|'
+                r'Cholesterole?\s*Total|Cholesterol-HDL|Cholesterol-LDL|'
+                r'Tryglyceride|Uric\s*acide|'
+                r'GGT\s*\(Gamm\s*Glutamyl\s*Transferas\)|SGPT/ALT|SGOT/AST|'
+                r'Morphine|Amphetamine|Metamphetamine|'
+                r'WBC|LYM%|MONO%|NUE%|EOSINO%|BASO%|HGB|MCH|MCHC|RBC|MCV|'
+                r'LEU|NIT|URO|PRO|PH|BLO|SG|KET|BIL|GLU|ASC|'
+                r'Group|Rhesus))'
+                r'\s*:?\s*'
+                r'(?P<result>\d+\.?\d*|NEGATIVE|POSITIVE|[ABO]{1,2}|○)\s*'
+                r'(?P<flag>[HLhl](?:\s+[HLhl])?)?\s*'
+                r'(?P<unit>(?:mg/dL|U/L|%|\$U/L\$|g/dL|Leu/µL|Ery/pl|'
+                r'x?X?1012/L|10[⁹9]/L|fl|\$10\^\{9\}/L\$|pg|응|%0|0P|09)?)?\s*'
+                r'(?P<reference_range>(?:\(?[^)\n]+\)?|\$\([^)]+\)\$)?)?$',
                 re.MULTILINE | re.IGNORECASE
             )
         }
@@ -519,7 +570,26 @@ class OptimizedLabReportParser:
             '012 89 17 45',
             '012 28 60 70'
         ]
-        self.excluded_test_names = {'HOSPITAL', 'Results', 'Unit', 'Reference Range', 'Flag', 'CBC', 'TRANSAMINASE', 'DRUG URINE', 'HEMATOLOGY', 'URINE ANALYSIS 11 TEST'}
+        self.excluded_test_names = {
+            'HOSPITAL', 'Results', 'Unit', 'Reference Range', 'Flag',
+            'CBC', 'TRANSAMINASE', 'DRUG URINE', 'HEMATOLOGY',
+            'URINE ANALYSIS 11 TEST'
+        }
+
+    @staticmethod
+    def _normalize_key(raw_key: str) -> str:
+        """Normalise a garbled OCR key to its English field name.
+
+        Examples:
+            'min:/Name'   → '/Name'
+            'In 9/Gender' → '/Gender'
+            'Patient ID'  → 'Patient ID'  (unchanged)
+        """
+        # If the key ends with /EnglishLabel, extract that suffix
+        m = re.search(r'[/](Name|Age|Gender|Phone)$', raw_key, re.IGNORECASE)
+        if m:
+            return '/' + m.group(1)
+        return raw_key.strip()
 
     def parse_optimized(self, ocr_text: str) -> Dict[str, Any]:
         start_time = time.time()
@@ -552,13 +622,32 @@ class OptimizedLabReportParser:
         for i, line in enumerate(header_lines):
             if i in processed_indices or not line:
                 continue
+
+            # Normalise garbled keys like 'min:/Name' → '/Name'
+            normalised = self._normalize_key(line)
+
+            # Case 1: key-on-one-line, value-starts-with-colon on next line
+            #   e.g.  line[i]   = 'min:/Name'
+            #         line[i+1] = ': HENG VANNAT'
+            if normalised in self.all_field_keys or normalised != line:
+                lookup_key = normalised if normalised in self.all_field_keys else line
+                value = self._find_value_fast(header_lines, i + 1, processed_indices)
+                if value and not self._is_hospital_phone_fast(lookup_key, value):
+                    field_map[normalised] = value
+                    processed_indices.add(i)
+                    continue
+
+            # Case 2: 'Key : Value' on a single line (but NOT garbled /Name lines)
             if ':' in line and not line.startswith(':'):
                 key, value = line.split(':', 1)
                 key, value = key.strip(), value.strip()
+                norm_key = self._normalize_key(key)
                 if key and value and not self._is_hospital_phone_fast(key, value):
-                    field_map[key] = value
+                    field_map[norm_key if norm_key in self.all_field_keys else key] = value
                     processed_indices.add(i)
                     continue
+
+            # Case 3: exact match in all_field_keys (English-only keys)
             if line in self.all_field_keys:
                 value = self._find_value_fast(header_lines, i + 1, processed_indices)
                 if value and not self._is_hospital_phone_fast(line, value):
@@ -569,12 +658,21 @@ class OptimizedLabReportParser:
     def _find_header_boundaries(self, lines: List[str]) -> tuple:
         header_start = 0
         header_end = len(lines)
+        # Detect header start: look for any known field key OR garbled /Name, /Age etc.
+        header_keywords_re = re.compile(
+            r'(?:/Name|/Age|/Gender|/Phone|Patient\s*ID|Lab\s*ID|Requested)',
+            re.IGNORECASE
+        )
+        category_keywords = [
+            'LABORATORY REPORT', 'BIOCHIMISTRY', 'BIOCHEMISTRY',
+            'ENZYMOLOGY', 'HEMATOLOGY', 'DRUG URINE', 'URINE ANALYSIS',
+            'ABO BLOOD GROUP'
+        ]
         for idx, line in enumerate(lines):
-            if header_start == 0:
-                if any(key in line for key in self.all_field_keys):
-                    header_start = idx
-                    break
-            if any(cat in line.upper() for cat in ['LABORATORY REPORT', 'BIOCHIMISTRY', 'ENZYMOLOGY', 'HEMATOLOGY', 'DRUG URINE', 'URINE ANALYSIS']):
+            if header_start == 0 and header_keywords_re.search(line):
+                header_start = idx
+            upper = line.upper()
+            if header_start > 0 and any(cat in upper for cat in category_keywords):
                 header_end = idx
                 break
         return header_start, header_end
@@ -595,7 +693,8 @@ class OptimizedLabReportParser:
         return None
 
     def _is_hospital_phone_fast(self, key: str, value: str) -> bool:
-        if key not in ['ទូរស័ព្ទ/Phone', 'លេខទូរស័ព្ទ']:
+        phone_keys = {'ទូរស័ព្ទ/Phone', 'លេខទូរស័ព្ទ', '/Phone', 'Phone'}
+        if key not in phone_keys:
             return False
         return any(pattern in value for pattern in self.hospital_phone_patterns)
 
@@ -626,6 +725,11 @@ class OptimizedLabReportParser:
                         phone = match.group(1)
                         if phone and not any(hp in phone for hp in self.hospital_phone_patterns):
                             corrected[field_keys[0]] = phone
+                    elif field_type == 'validated_by':
+                        val = match.group(1).strip() if match.groups() else ''
+                        # Filter out single-char garbage from signature areas
+                        if len(val) >= 2:
+                            corrected[field_keys[0]] = val
                     else:
                         corrected[field_keys[0]] = match.group(1).strip() if match.groups() else match.group(0).strip()
         return corrected
@@ -634,32 +738,87 @@ class OptimizedLabReportParser:
         test_results = []
         current_category = None
         full_text = '\n'.join(lines)
+
+        # Pre-merge multi-line test names:
+        # 'Creatinine,\nserum' → 'Creatinine, serum'
+        full_text = re.sub(r'Creatinine,\s*\n\s*serum', 'Creatinine, serum', full_text)
+
         category_matches = list(self.compiled_patterns['category'].finditer(full_text))
         category_ranges = [(m.start(), m.end(), m.group(1)) for m in category_matches]
         category_ranges.append((len(full_text), len(full_text), None))
+
+        # Track seen test names to avoid duplicates
+        seen_tests = set()
         
         for i, (start, end, category) in enumerate(category_ranges[:-1]):
             if category:
-                current_category = category.upper().replace('BIOCHIMISTRY', 'BIOCHEMISTRY').replace('DRUG URINE', 'DRUG URINE').replace('URINE ANALYSIS', 'URINE ANALYSIS')
+                # Normalise category name
+                cat_upper = category.upper()
+                current_category = cat_upper \
+                    .replace('BIOCHIMISTRY', 'BIOCHEMISTRY') \
+                    .replace('ABO BLOOD GROUP', 'BLOOD GROUP')
                 section_text = full_text[start:category_ranges[i+1][0]]
-                matches = self.compiled_patterns['test_row'].finditer(section_text)
+
+                # Extract flag lines that appear after results (e.g., 'H', 'L', 'H H')
+                # Build a map of line positions → flags from the section
+                section_lines = section_text.split('\n')
+                line_flags = {}
+                for li, sl in enumerate(section_lines):
+                    stripped = sl.strip()
+                    # Standalone flag lines: 'H', 'L', 'H H', 'Н' (Cyrillic H)
+                    if re.match(r'^[HLhlНн](?:\s+[HLhlНн])?$', stripped):
+                        line_flags[li] = stripped[0].upper()
+                        if stripped[0] in 'Нн':  # Cyrillic H → Latin H
+                            line_flags[li] = 'H'
+
+                matches = list(self.compiled_patterns['test_row'].finditer(section_text))
                 for match in matches:
                     test_name = match.group('test_name').strip()
                     if test_name in self.excluded_test_names:
                         continue
-                    test_names = [t.strip() for t in re.split(r'\n|TRANSAMINASE', test_name) if t.strip() and t.strip() not in self.excluded_test_names]
+                    # Skip spurious 'serum' entry
+                    if test_name.lower() == 'serum':
+                        continue
+
+                    test_names = [t.strip() for t in re.split(r'\n|TRANSAMINASE', test_name)
+                                  if t.strip() and t.strip() not in self.excluded_test_names]
                     result = match.group('result')
                     flag = match.group('flag') if match.group('flag') else None
                     unit = match.group('unit') if match.group('unit') else None
                     reference_range = match.group('reference_range') if match.group('reference_range') else None
+
+                    # Normalise flag: 'H H' → 'H', Cyrillic 'Н' → 'H'
+                    if flag:
+                        flag = flag.strip().split()[0].upper()
+                        if flag in ('Н', 'н'):
+                            flag = 'H'
+
+                    # If no flag from inline regex, check if there's a flag line nearby
+                    if not flag:
+                        # Find the line index AFTER this match's end
+                        match_end_pos = match.end()
+                        match_end_line = section_text[:match_end_pos].count('\n')
+                        # Check lines after the match end (up to 6 lines)
+                        for offset in range(0, 7):
+                            check_idx = match_end_line + offset
+                            if check_idx in line_flags:
+                                flag = line_flags[check_idx]
+                                break
+
                     if reference_range:
-                        reference_range = re.sub(r'[^\(\)\d\.\-\s\$]', '', reference_range).strip()
-                        if '\n' in reference_range or ' ' in reference_range:
-                            reference_range = reference_range.split('\n')[0].split(' ')[0].strip()
+                        reference_range = re.sub(r'[^\(\)\d\.\-\s\$\>]', '', reference_range).strip()
+
                     for tn in test_names:
                         tn = tn.replace('Cholesterol Total', 'Cholesterole Total').replace('Uric acide', 'Uric acide')
                         if 'GGT' in tn and '(Gamm Glutamyl Transferas) (Gamm Glutamyl Transferas)' in tn:
                             tn = 'GGT (Gamm Glutamyl Transferas)'
+                        
+                        # Skip duplicates
+                        test_key = f"{current_category}:{tn}"
+                        if test_key in seen_tests:
+                            continue
+                        seen_tests.add(test_key)
+
                         if tn == 'Creatinine, serum':
                             unit = 'mg/dL'
                             reference_range = '(0.9 - 1.1)'
@@ -801,6 +960,12 @@ class OptimizedLabReportParser:
                             unit = 'mg/dL'
                             reference_range = None
                             result = result or 'NEGATIVE'
+                        elif tn == 'Group':
+                            unit = None
+                            reference_range = None
+                        elif tn == 'Rhesus':
+                            unit = None
+                            reference_range = None
                         test_results.append({
                             'category': current_category,
                             'testName': tn,
