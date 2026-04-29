@@ -168,6 +168,9 @@ export default function VerificationPage() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [fileContentType, setFileContentType] = useState<string>("");
+  const [pageLoading, setPageLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Modal states
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -367,6 +370,9 @@ export default function VerificationPage() {
       } catch (err: unknown) {
         console.error("💥 Failed to fetch single report:", err);
         handleFetchError(err, `report ${id}`);
+        setPageError(`Failed to load report. Please try again.`);
+      } finally {
+        setPageLoading(false);
       }
     },
     [fetchPdfData, handleFetchError, transformLabReportToProcessedReport],
@@ -402,6 +408,14 @@ export default function VerificationPage() {
 
       setReports(transformedReports);
 
+      // Check if batch is still processing (no reports ready yet)
+      const batchStatus = apiResponse.batch?.status || '';
+      if (transformedReports.length === 0 && (batchStatus === 'processing' || batchStatus === 'pending')) {
+        setIsProcessing(true);
+      } else {
+        setIsProcessing(false);
+      }
+
       if (transformedReports.length > 0) {
         const targetReport = reportId
           ? transformedReports.find((r: ProcessedReport) => r.id === reportId)
@@ -416,6 +430,9 @@ export default function VerificationPage() {
     } catch (err: unknown) {
       console.error("💥 Failed to fetch batch reports:", err);
       handleFetchError(err, `batch ${batchId}`);
+      setPageError(`Failed to load batch reports. Please try again.`);
+    } finally {
+      setPageLoading(false);
     }
   }, [
     batchId,
@@ -475,12 +492,15 @@ export default function VerificationPage() {
   }, []);
 
   useEffect(() => {
+    setPageLoading(true);
+    setPageError("");
     if (reportId) {
       fetchSingleReport(reportId);
     } else if (batchId) {
       fetchBatchReports();
     } else {
       fetchAllReports();
+      setPageLoading(false);
     }
   }, [
     batchId,
@@ -489,6 +509,16 @@ export default function VerificationPage() {
     fetchBatchReports,
     fetchSingleReport,
   ]);
+
+  // Auto-retry polling when batch is still processing
+  useEffect(() => {
+    if (!isProcessing) return;
+    const interval = setInterval(() => {
+      console.log('🔄 Auto-refreshing (batch still processing)...');
+      fetchBatchReports();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isProcessing, fetchBatchReports]);
 
   // Helper functions for updating data
   const updatePatientInfo = (field: keyof PatientInfo, value: string) => {
@@ -783,6 +813,111 @@ export default function VerificationPage() {
     }
   };
 
+  // Full-page loading state
+  if (pageLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center space-y-4">
+            <div className="relative">
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600 mx-auto"></div>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900">Loading Report Data</h3>
+            <p className="text-sm text-gray-500 max-w-sm">
+              Fetching extracted data and document preview. This may take a moment if the report is still being processed...
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Error state with retry
+  if (pageError && reports.length === 0) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center space-y-4 max-w-md">
+            <div className="bg-amber-50 rounded-full h-16 w-16 flex items-center justify-center mx-auto">
+              <FileText className="h-8 w-8 text-amber-500" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900">Report Not Ready Yet</h3>
+            <p className="text-sm text-gray-500">
+              The report may still be processing. Please wait a moment and try again.
+            </p>
+            <div className="flex space-x-3 justify-center">
+              <button
+                onClick={() => {
+                  setPageLoading(true);
+                  setPageError("");
+                  if (reportId) fetchSingleReport(reportId);
+                  else if (batchId) fetchBatchReports();
+                }}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2 animate-spin" style={{ animation: 'none' }} />
+                Try Again
+              </button>
+              <button
+                onClick={() => router.push('/main/verification/monitoring')}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              >
+                Back to Monitoring
+              </button>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Processing state — batch exists but reports aren't ready yet
+  if (isProcessing && !pageLoading && reports.length === 0) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => router.push('/main/verification/monitoring')}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Monitoring
+            </button>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Batch Verification - {batchInfo?.name || `Batch ${batchId}`}
+              </h1>
+            </div>
+          </div>
+
+          {/* Processing Animation */}
+          <div className="bg-white shadow rounded-lg p-12">
+            <div className="flex flex-col items-center justify-center space-y-6">
+              <div className="relative">
+                <div className="animate-spin rounded-full h-20 w-20 border-4 border-blue-200 border-t-blue-600"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <FileText className="h-8 w-8 text-blue-600" />
+                </div>
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-semibold text-gray-900">Processing Your Reports</h3>
+                <p className="text-gray-500 max-w-md">
+                  The OCR engine is extracting data from your uploaded documents. This page will automatically update once processing is complete.
+                </p>
+              </div>
+              <div className="flex items-center space-x-2 text-sm text-blue-600 bg-blue-50 px-4 py-2 rounded-full">
+                <div className="animate-pulse h-2 w-2 rounded-full bg-blue-600"></div>
+                <span>Auto-refreshing every 5 seconds...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -883,10 +1018,18 @@ export default function VerificationPage() {
                   className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
                     batchInfo.status === "completed"
                       ? "bg-green-100 text-green-800"
-                      : "bg-yellow-100 text-yellow-800"
+                      : batchInfo.status === "completed_with_errors"
+                        ? "bg-amber-100 text-amber-800"
+                        : batchInfo.status === "processing"
+                          ? "bg-blue-100 text-blue-800"
+                          : batchInfo.status === "failed"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-yellow-100 text-yellow-800"
                   }`}
                 >
-                  {batchInfo.status}
+                  {batchInfo.status === "completed_with_errors"
+                    ? "completed (with errors)"
+                    : batchInfo.status}
                 </span>
               </div>
             </div>

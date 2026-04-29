@@ -244,6 +244,13 @@ class ProcessLabReportBatch implements ShouldQueue
     {
         $this->reportBatch->refresh();
         
+        // Fix any reports that have extracted_data but are still marked as 'failed'
+        // (can happen from previous broken runs)
+        $this->reportBatch->labReports()
+            ->where('status', 'failed')
+            ->whereNotNull('extracted_data')
+            ->update(['status' => 'processed', 'processing_error' => null]);
+
         // Get actual counts from database
         $statusCounts = $this->reportBatch->labReports()
             ->selectRaw('status, count(*) as count')
@@ -255,10 +262,16 @@ class ProcessLabReportBatch implements ShouldQueue
         $failedCount = $statusCounts['failed'] ?? 0;
         $totalProcessed = $processedCount + $failedCount;
 
-        // Determine final status
+        // Determine final status:
+        // - 'completed' if all reports processed successfully
+        // - 'completed_with_errors' if some failed but at least one succeeded
+        // - 'failed' only if ALL reports failed (zero succeeded)
+        // - 'partial' if not all reports have been processed yet
         $finalStatus = 'completed';
         if ($totalProcessed < $this->reportBatch->total_reports) {
             $finalStatus = 'partial';
+        } elseif ($failedCount > 0 && $processedCount > 0) {
+            $finalStatus = 'completed_with_errors';
         } elseif ($failedCount > 0 && $processedCount === 0) {
             $finalStatus = 'failed';
         }
