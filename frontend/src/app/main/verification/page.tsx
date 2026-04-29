@@ -167,6 +167,7 @@ export default function VerificationPage() {
   const [pdfDataUrl, setPdfDataUrl] = useState<string>("");
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
+  const [fileContentType, setFileContentType] = useState<string>("");
 
   // Modal states
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -210,24 +211,27 @@ export default function VerificationPage() {
     try {
       setPdfLoading(true);
       setPdfError("");
+      setFileContentType("");
 
-      console.log("🚀 Fetching PDF data for report ID:", reportId);
+      console.log("🚀 Fetching file data for report ID:", reportId);
       const response = await apiClient.get(`/${reportId}/pdf-data`);
-      console.log("✅ PDF API Response:", response);
+      console.log("✅ File API Response:", response);
 
       if (response.success && response.data?.base64_content) {
         const base64 = response.data.base64_content;
-        const dataUrl = `data:application/pdf;base64,${base64}`;
+        const contentType = response.data.content_type || "application/pdf";
+        setFileContentType(contentType);
+        const dataUrl = `data:${contentType};base64,${base64}`;
         setPdfDataUrl(dataUrl);
       } else {
-        throw new Error("Invalid PDF response structure");
+        throw new Error("Invalid file response structure");
       }
     } catch (err: unknown) {
-      console.error("💥 Failed to fetch PDF data:", err);
-      let errorMessage = "Failed to load PDF preview";
+      console.error("💥 Failed to fetch file data:", err);
+      let errorMessage = "Failed to load document preview";
 
       if (isApiError(err) && err.status === 404) {
-        errorMessage = "PDF file not found";
+        errorMessage = "File not found";
       } else if (isApiError(err) && err.status === 401) {
         errorMessage = "Authentication failed. Please log in again.";
       } else if (isApiError(err) && err.message) {
@@ -898,7 +902,7 @@ export default function VerificationPage() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-medium text-gray-900 flex items-center">
                     <Eye className="h-5 w-5 mr-2 text-orange-600" />
-                    PDF Preview
+                    Document Preview
                   </h3>
                   <div className="flex items-center space-x-2">
                     <button
@@ -906,7 +910,7 @@ export default function VerificationPage() {
                       className="text-blue-600 hover:text-blue-800 font-medium text-sm"
                       disabled={!pdfDataUrl}
                     >
-                      Open Full PDF
+                      {fileContentType.startsWith("image/") ? "Open Full Image" : "Open Full PDF"}
                     </button>
                     <button
                       onClick={() => setIsPreviewExpanded(!isPreviewExpanded)}
@@ -932,7 +936,7 @@ export default function VerificationPage() {
                   pdfLoading ? (
                     <div className="flex items-center justify-center h-96">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                      <span className="ml-3 text-gray-600">Loading PDF...</span>
+                      <span className="ml-3 text-gray-600">Loading document...</span>
                     </div>
                   ) : pdfError ? (
                     <div className="h-96 flex items-center justify-center bg-gray-50 rounded-md border border-gray-200">
@@ -945,11 +949,19 @@ export default function VerificationPage() {
                     <div
                       className={`${isPreviewExpanded ? "h-[800px]" : "h-[700px]"} transition-all duration-300`}
                     >
-                      <iframe
-                        src={pdfDataUrl}
-                        className="w-full h-full rounded-md border border-gray-200 shadow-sm"
-                        title="PDF Preview"
-                      />
+                      {fileContentType.startsWith("image/") ? (
+                        <img
+                          src={pdfDataUrl}
+                          alt="Lab Report Preview"
+                          className="w-full h-full object-contain rounded-md border border-gray-200 shadow-sm bg-gray-50"
+                        />
+                      ) : (
+                        <iframe
+                          src={pdfDataUrl}
+                          className="w-full h-full rounded-md border border-gray-200 shadow-sm"
+                          title="PDF Preview"
+                        />
+                      )}
                     </div>
                   )
                 ) : (

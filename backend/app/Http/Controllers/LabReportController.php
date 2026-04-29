@@ -622,15 +622,30 @@ class LabReportController extends Controller
         $fileContent = \Storage::disk('private')->get($filePath);
         $base64Content = base64_encode($fileContent);
         
+        // Detect actual MIME type from file extension
+        $extension = strtolower(pathinfo($labReport->original_filename ?? $filePath, PATHINFO_EXTENSION));
+        $mimeTypes = [
+            'pdf'  => 'application/pdf',
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png'  => 'image/png',
+            'tif'  => 'image/tiff',
+            'tiff' => 'image/tiff',
+            'bmp'  => 'image/bmp',
+            'gif'  => 'image/gif',
+            'webp' => 'image/webp',
+        ];
+        $contentType = $mimeTypes[$extension] ?? 'application/octet-stream';
+
         return response()->json([
             'success' => true,
             'data' => [
                 'filename' => $labReport->original_filename,
-                'content_type' => 'application/pdf',
+                'content_type' => $contentType,
                 'base64_content' => $base64Content,
                 'size' => strlen($fileContent)
             ],
-            'message' => 'PDF content retrieved successfully'
+            'message' => 'File content retrieved successfully'
         ]);
     }
 
