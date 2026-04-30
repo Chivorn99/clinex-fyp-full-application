@@ -8,11 +8,11 @@ Detailed operations guide:
 Hospital handover SOP (one page):
 - HOSPITAL_HANDOVER_SOP.md
 
-## KV Hospital Intranet Model
+## Hospital Intranet Model
 
 This project is best hosted on a private hospital network instead of the public internet.
 
-In practice, one trusted server inside the KV Hospital LAN runs all containers, and users access a single internal entrypoint through Nginx on `80/443`.
+In practice, one trusted server inside the Hospital LAN runs all containers, and users access a single internal entrypoint through Nginx on `80/443`.
 
 Staff devices on the same network open the app using the server's internal IP or internal DNS name, for example `https://10.10.5.20`.
 

@@ -182,22 +182,43 @@ def _preprocess_image_for_ocr(file_path: str) -> bytes:
 
 
 def _flatten_paddle_lines(ocr_result: Any) -> List[Any]:
-    """Normalize paddleocr output shape across versions into a flat line list."""
+    """Normalize paddleocr output shape across versions into a flat line list.
+
+    Handles:
+    - v2.x: list of [box, (text, score)] tuples
+    - v3.5: OCRResult objects with rec_texts / rec_scores attributes
+    - dict: {'rec_texts': [...], 'rec_scores': [...]}
+    """
     if not ocr_result:
         return []
 
+    # v3.5 OCRResult or plain dict with rec_texts / rec_scores
+    rec_texts = None
+    rec_scores = None
     if isinstance(ocr_result, dict):
         rec_texts = ocr_result.get('rec_texts')
         rec_scores = ocr_result.get('rec_scores')
-        if rec_texts and isinstance(rec_texts, list):
-            flattened: List[Any] = []
-            for idx, text in enumerate(rec_texts):
-                score = 0.0
-                if isinstance(rec_scores, list) and idx < len(rec_scores):
-                    score = float(rec_scores[idx])
-                flattened.append((None, (str(text), score)))
-            return flattened
+    elif hasattr(ocr_result, 'rec_texts'):
+        rec_texts = getattr(ocr_result, 'rec_texts', None)
+        rec_scores = getattr(ocr_result, 'rec_scores', None)
+    # Also try dict-like __getitem__ access (OCRResult supports this)
+    elif hasattr(ocr_result, '__getitem__') and not isinstance(ocr_result, (list, tuple)):
+        try:
+            rec_texts = ocr_result['rec_texts']
+            rec_scores = ocr_result['rec_scores']
+        except (KeyError, TypeError, IndexError):
+            pass
 
+    if rec_texts and isinstance(rec_texts, list):
+        flattened: List[Any] = []
+        for idx, text in enumerate(rec_texts):
+            score = 0.0
+            if isinstance(rec_scores, list) and idx < len(rec_scores):
+                score = float(rec_scores[idx])
+            flattened.append((None, (str(text), score)))
+        return flattened
+
+    # v2.x list format: [[box, (text, score)], ...]
     if isinstance(ocr_result, list):
         if ocr_result and isinstance(ocr_result[0], list) and ocr_result[0] and isinstance(ocr_result[0][0], (list, tuple)):
             return ocr_result[0]
@@ -206,8 +227,115 @@ def _flatten_paddle_lines(ocr_result: Any) -> List[Any]:
     return []
 
 
+def _reconstruct_lines_from_polys(ocr_result: Any) -> tuple[str, float]:
+    """Reconstruct reading-order lines from PaddleOCR v3.5 spatial data.
+
+    PaddleOCR v3.5 returns individual text fragments with bounding polygons.
+    This function groups fragments that share the same vertical position
+    (same visual line) and joins them left-to-right to produce properly
+    structured lines for the parser.
+    """
+    import numpy as np
+
+    # Extract spatial data from OCRResult
+    dt_polys = None
+    rec_texts = None
+    rec_scores = None
+
+    for attr in ['dt_polys', 'rec_texts', 'rec_scores']:
+        val = None
+        if isinstance(ocr_result, dict):
+            val = ocr_result.get(attr)
+        elif hasattr(ocr_result, attr):
+            val = getattr(ocr_result, attr, None)
+        elif hasattr(ocr_result, '__getitem__') and not isinstance(ocr_result, (list, tuple)):
+            try:
+                val = ocr_result[attr]
+            except (KeyError, TypeError, IndexError):
+                pass
+        if attr == 'dt_polys':
+            dt_polys = val
+        elif attr == 'rec_texts':
+            rec_texts = val
+        elif attr == 'rec_scores':
+            rec_scores = val
+
+    if not rec_texts or not dt_polys:
+        return '', 0.0
+
+    if not rec_scores:
+        rec_scores = [0.0] * len(rec_texts)
+
+    # Build fragments with spatial position
+    fragments = []
+    for text, score, poly in zip(rec_texts, rec_scores, dt_polys):
+        text = str(text).strip()
+        if not text:
+            continue
+        poly_arr = np.array(poly)
+        y_mid = float(poly_arr[:, 1].mean())
+        x_left = float(poly_arr[:, 0].min())
+        fragments.append((y_mid, x_left, text, float(score)))
+
+    if not fragments:
+        return '', 0.0
+
+    # Sort by Y then X
+    fragments.sort(key=lambda f: (f[0], f[1]))
+
+    # Group by Y within tolerance (same visual line)
+    LINE_Y_TOLERANCE = 15  # pixels
+    lines = []
+    current_line = [fragments[0]]
+    for frag in fragments[1:]:
+        if abs(frag[0] - current_line[0][0]) < LINE_Y_TOLERANCE:
+            current_line.append(frag)
+        else:
+            current_line.sort(key=lambda f: f[1])  # left-to-right
+            lines.append(current_line)
+            current_line = [frag]
+    if current_line:
+        current_line.sort(key=lambda f: f[1])
+        lines.append(current_line)
+
+    # Join fragments on each line with spaces
+    text_lines = []
+    all_scores = []
+    for line in lines:
+        joined = '    '.join(f[2] for f in line)
+        text_lines.append(joined)
+        all_scores.extend(f[3] for f in line)
+
+    extracted_text = '\n'.join(text_lines)
+    avg_confidence = sum(all_scores) / len(all_scores) if all_scores else 0.0
+    return extracted_text, avg_confidence
+
+
 def _parse_paddle_result(ocr_result: Any) -> tuple[str, float]:
-    """Parse PaddleOCR result into text and average confidence."""
+    """Parse PaddleOCR result into text and average confidence.
+
+    For v3.5 OCRResult with dt_polys, uses spatial reconstruction.
+    For v2.x list results, falls back to sequential parsing.
+    """
+    # Try spatial reconstruction first (v3.5 with polygon data)
+    has_polys = False
+    if isinstance(ocr_result, dict):
+        has_polys = bool(ocr_result.get('dt_polys'))
+    elif hasattr(ocr_result, 'dt_polys'):
+        has_polys = bool(getattr(ocr_result, 'dt_polys', None))
+    elif hasattr(ocr_result, '__getitem__') and not isinstance(ocr_result, (list, tuple)):
+        try:
+            has_polys = bool(ocr_result['dt_polys'])
+        except (KeyError, TypeError, IndexError):
+            pass
+
+    if has_polys:
+        try:
+            return _reconstruct_lines_from_polys(ocr_result)
+        except Exception as e:
+            print(f'DEBUG: Spatial reconstruction failed ({e}), falling back to sequential parse', file=sys.stderr)
+
+    # Fallback: sequential parsing for v2.x or when polys unavailable
     text_lines: List[str] = []
     confidences: List[float] = []
 
@@ -233,6 +361,31 @@ def _parse_paddle_result(ocr_result: Any) -> tuple[str, float]:
     extracted_text = '\n'.join(text_lines)
     average_confidence = sum(confidences) / len(confidences) if confidences else 0.0
     return extracted_text, average_confidence
+
+
+def _call_paddle_ocr(ocr: Any, file_path: str) -> Any:
+    """Call PaddleOCR with API-version compatibility.
+
+    v3.5+: ocr.predict(file_path) -> iterator of OCRResult
+    v2.x:  ocr.ocr(file_path, cls=True) -> list of results
+    """
+    # Try v3.5+ predict() first
+    if hasattr(ocr, 'predict'):
+        try:
+            results = list(ocr.predict(file_path))
+            if results:
+                return results[0]  # OCRResult with rec_texts / rec_scores
+        except TypeError:
+            pass  # Fall through to legacy API
+
+    # Legacy v2.x API
+    if hasattr(ocr, 'ocr'):
+        try:
+            return ocr.ocr(file_path, cls=True)
+        except TypeError:
+            return ocr.ocr(file_path)
+
+    raise RuntimeError('PaddleOCR instance has neither predict() nor ocr() method')
 
 
 def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
@@ -341,7 +494,7 @@ def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
             pix.save(temp_img_path)
 
             try:
-                result = ocr.ocr(temp_img_path, cls=True)
+                result = _call_paddle_ocr(ocr, temp_img_path)
                 page_text, page_confidence = _parse_paddle_result(result)
                 if page_text:
                     all_text.append(page_text)
@@ -361,7 +514,7 @@ def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
             'page_confidences': page_confidences,
         }
 
-    result = ocr.ocr(file_path, cls=True)
+    result = _call_paddle_ocr(ocr, file_path)
     text, confidence = _parse_paddle_result(result)
     print(f'DEBUG: PaddleOCR extracted {len(text)} characters with confidence {confidence:.3f}', file=sys.stderr)
     return {
@@ -598,7 +751,7 @@ class OptimizedLabReportParser:
             # --- Patient fields: use .*?/Name so garbled Khmer prefix is ignored ---
             'name': re.compile(
                 r'(?:.*?/)Name\s*:?\s*\n?:?\s*([A-Z][A-Za-z\s.]+?)'
-                r'(?=\s*(?:Patient|/Age|\n|$))',
+                r'(?=\s{3,}|\s*(?:Patient|/Age|\n|$))',
                 re.UNICODE | re.MULTILINE
             ),
             'patient_id': re.compile(r'Patient\s*ID\s*:?\s*\n?:?\s*(PT\d+)'),
@@ -654,10 +807,10 @@ class OptimizedLabReportParser:
                 r'Group|Rhesus))'
                 r'\s*:?\s*'
                 r'(?P<result>\d+\.?\d*|NEGATIVE|POSITIVE|[ABO]{1,2}|○)\s*'
-                r'(?P<flag>[HLhl](?:\s+[HLhl])?)?\s*'
                 r'(?P<unit>(?:mg/dL|U/L|%|\$U/L\$|g/dL|Leu/µL|Ery/pl|'
-                r'x?X?1012/L|10[⁹9]/L|fl|\$10\^\{9\}/L\$|pg|응|%0|0P|09)?)?\s*'
-                r'(?P<reference_range>(?:\(?[^)\n]+\)?|\$\([^)]+\)\$)?)?$',
+                r'x?X?1012/L|10[⁹9]/L|fl|\$10\^{9}/L\$|pg|응|%0|0P|09)?)?\s*'
+                r'(?P<reference_range>(?:\(?[^)\n]+\)?|\$\([^)]+\)\$)?)?\s*'
+                r'(?P<flag>[HLhl](?:\s+[HLhl])?)?\s*$',
                 re.MULTILINE | re.IGNORECASE
             )
         }
@@ -1228,70 +1381,47 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
         kiri_config = _get_kiri_config()
         
         if mime_type in {'application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp'}:
-            # ── Fusion mode: both Paddle + Kiri enabled ──
+            # ── Dual-engine mode: Paddle primary, Kiri fallback ──
             if paddle_config['enabled'] and kiri_config['enabled']:
-                # Pre-load torch before paddle to avoid Windows DLL conflicts (shm.dll)
-                try:
-                    import torch  # noqa: F401
-                except ImportError:
-                    pass
-                paddle_text = None
-                paddle_conf = 0.0
-                kiri_text = None
-                kiri_conf = 0.0
-                kiri_results = []
-
-                # Run PaddleOCR
+                # PaddleOCR is primary — best for structured English/numeric lab data
                 try:
                     paddle_result = process_with_paddle_ocr(file_path)
-                    paddle_text = paddle_result['text']
-                    paddle_conf = paddle_result['confidence']
-                    print(f'DEBUG: PaddleOCR pass complete — {len(paddle_text)} chars, confidence {paddle_conf:.3f}', file=sys.stderr)
+                    ocr_text = paddle_result['text']
+                    confidence = paddle_result['confidence']
+                    ocr_engine = 'paddle (primary)'
+                    print(f'DEBUG: PaddleOCR primary pass — {len(ocr_text)} chars, confidence {confidence:.3f}', file=sys.stderr)
                 except Exception as paddle_error:
-                    print(f'DEBUG: PaddleOCR failed ({paddle_error}), will use Kiri-only mode', file=sys.stderr)
+                    print(f'DEBUG: PaddleOCR failed ({paddle_error}), trying Kiri OCR fallback', file=sys.stderr)
 
-                # Run Kiri OCR
-                try:
-                    kiri_result = process_with_kiri_ocr(file_path)
-                    kiri_text = kiri_result['text']
-                    kiri_conf = kiri_result['confidence']
-                    kiri_results = kiri_result.get('results', [])
-                    print(f'DEBUG: Kiri OCR pass complete — {len(kiri_text)} chars, confidence {kiri_conf:.3f}', file=sys.stderr)
-                except Exception as kiri_error:
-                    print(f'DEBUG: Kiri OCR failed ({kiri_error}), will use Paddle-only mode', file=sys.stderr)
-
-                # Fuse results if both succeeded
-                if paddle_text and kiri_text:
-                    fused = _fuse_ocr_texts(paddle_text, paddle_conf, kiri_text, kiri_conf, kiri_results)
-                    ocr_text = fused['text']
-                    confidence = fused['confidence']
-                    ocr_engine = f'paddle+kiri (fused: {fused["paddle_line_count"]}P/{fused["kiri_line_count"]}K)'
-                elif kiri_text:
-                    ocr_text = kiri_text
-                    confidence = kiri_conf
-                    ocr_engine = 'kiri (paddle unavailable)'
-                elif paddle_text:
-                    ocr_text = paddle_text
-                    confidence = paddle_conf
-                    ocr_engine = 'paddle (kiri unavailable)'
-                else:
-                    # Both local engines failed — fall back to Google
-                    print(f'DEBUG: Both local engines failed, falling back to Google Document AI', file=sys.stderr)
+                    # KiriOCR fallback — Khmer-specialized transformer
                     try:
-                        ocr_text = process_with_google_document_ai(file_path)
-                        ocr_engine = 'google (fallback from local engines)'
-                    except Exception as google_error:
-                        raise Exception(f'All OCR engines failed. Paddle, Kiri, and Google all unavailable. Last error: {google_error}')
+                        kiri_result = process_with_kiri_ocr(file_path)
+                        ocr_text = kiri_result['text']
+                        confidence = kiri_result['confidence']
+                        ocr_engine = 'kiri (fallback from paddle)'
+                        print(f'DEBUG: Kiri OCR fallback — {len(ocr_text)} chars, confidence {confidence:.3f}', file=sys.stderr)
+                    except Exception as kiri_error:
+                        print(f'DEBUG: Kiri OCR also failed ({kiri_error}), trying Google', file=sys.stderr)
 
-                # If fused confidence is still low, optionally try Google
-                if confidence < min(paddle_config['confidence_threshold'], kiri_config['confidence_threshold']):
-                    print(f'DEBUG: Fused confidence {confidence:.3f} below threshold, trying Google fallback', file=sys.stderr)
+                        # Google last resort
+                        try:
+                            ocr_text = process_with_google_document_ai(file_path)
+                            ocr_engine = 'google (fallback from local engines)'
+                        except Exception as google_error:
+                            raise Exception(
+                                f'All OCR engines failed. Paddle: {paddle_error}, '
+                                f'Kiri: {kiri_error}, Google: {google_error}'
+                            )
+
+                # If PaddleOCR confidence is below threshold, try Google as enhancement
+                if confidence < paddle_config['confidence_threshold'] and ocr_engine.startswith('paddle'):
+                    print(f'DEBUG: PaddleOCR confidence {confidence:.3f} below {paddle_config["confidence_threshold"]}, trying Google', file=sys.stderr)
                     try:
                         google_text = process_with_google_document_ai(file_path)
                         ocr_text = google_text
-                        ocr_engine = f'google (fallback from {ocr_engine})'
+                        ocr_engine = f'google (fallback from paddle low-confidence)'
                     except Exception as google_fallback_error:
-                        print(f'DEBUG: Google fallback unavailable ({google_fallback_error}); keeping fused output', file=sys.stderr)
+                        print(f'DEBUG: Google fallback unavailable ({google_fallback_error}); keeping PaddleOCR output', file=sys.stderr)
 
             # ── Paddle-only mode ──
             elif paddle_config['enabled']:
