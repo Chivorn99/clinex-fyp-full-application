@@ -1,29 +1,30 @@
-saj 625
-62
-Velinglis
+werings Feat
+mas
+saj 125
 KV Hospital
-032
 K+
-ñ§¤j §¤nɲmåðçisl nɲmůy:wiiwmuziñpn škilm:ġñoncinń ugjunnnnnännu
-bniswu:gat:máquumïn ŝhwñgang §:[] imminu j
-thņiù₪múiðu üís fu µ mw ís á diys Shusiðh U.N.W¶
+ñšaj šunɲmist npmůdy:wimuziñpo shijm:qñonviná vůjungınınnkonu
+bniswu:qui:máquumïñ êquñsang :[n:im:) imwņsminümü äíîñ¤áƒš
+iņináciu nájs ķu µmw äñjs is instru
 HOSPITAL
 min:/Name
-: Mao Sophat
-Huis/Age
-68 Y, 11 M, 25 D
-Ing/Gender
+: HENG VANNAT
+inti/Age
+: 35 Y, 1 D
+In 9/Gender
 : Male
 Patient ID
-: PT000579
+: PT001772
 Lab ID
-: LT001091
+: LT001177
+in/Phone
+: 060991736
 Requested Date
-: 08/03/2024 09:32
+11/03/2024 00:49
 Collected Date
-: 08/03/2024 15:41
+: 11/03/2024 09:09
 Analysis Date
-: 08/03/2024 15:41
+: 11/03/2024 09:09
 Requested By
 : Dr. Neak Bunteum
 LABORATORY REPORT
@@ -35,84 +36,61 @@ Flag
 CBC
 WBC
 :
-8.4
-109/L
+7.6
+10⁹/L
 (3.5-10.0)
 LYM%
 :
-23.9
-60
+38.0
+OP
 (15.0-50.0)
 MONO%
 :
-6.1
-%
+6.3
+09
 (2.0-15.0)
 NUE%
 :
-70.0
+55.7
 %0
 (35.0-80.0)
 EOSINO%
 :
-13.7
-%
+15.5
+응
 (11.5-16.5)
 BASO%
-:
-26.0
-응
-(25.0-35.0)
+: 29.3
+09
+25.0-35.0)
 HGB
 :
-36.3
+36.5
 g/dL
 (31.0-38.0)
 MCH
 :
-5.27
+5.30
 pg
 (3.50-5.50)
 MCHC
 :
-71.6
+80.2
 g/dL
 (75.0-100.0)
-L
 RBC
-:
-37.8
-X1012/L
+: 42.5
+x1012/L
 (35.0-55.0)
 MCV
-:
-164
+: 335
 fl
 (150-400)
-ENZYMOLOGY
-Results
-Unit
-Reference Range
-Flag
-TRANSAMINASE
-SGPT/ALT
-29
-:
-U/L
--
-(0
-41)
-SGOT/AST
-:
-30
-U/L
-(0
--
-40)
-Validated By :
+Validated By:
 Lab Technician:
-Lessiness
-2024-11-15 14:12
-2024-11-15 14:12
-mwwis: nûgniumi wijdinēšu vynnjawj 18ġġjaw (oywñanskujam b ñ.8)
-î₪aţiņ: 097 840 47 89/ 012 89 17 45/012 28 60 70
+b
+the
+2024-03-11 09:12
+2024-03-11 09:12
+mawgs: qûqnfumi wjšinēšu vynnjaw tannjaw (oywňanskunjom 5 ñ.8)
+i₪açıšņ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70

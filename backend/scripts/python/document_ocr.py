@@ -810,7 +810,7 @@ class OptimizedLabReportParser:
                 r'(?P<unit>(?:mg/dL|U/L|%|\$U/L\$|g/dL|Leu/µL|Ery/pl|'
                 r'x?X?1012/L|10[⁹9]/L|fl|\$10\^{9}/L\$|pg|응|%0|0P|09)?)?\s*'
                 r'(?P<reference_range>(?:\(?[^)\n]+\)?|\$\([^)]+\)\$)?)?\s*'
-                r'(?P<flag>[HLhl](?:\s+[HLhl])?)?\s*$',
+                r'(?P<flag>[HLhl1](?:\s+[HLhl1])?)?\s*$',
                 re.MULTILINE | re.IGNORECASE
             )
         }
@@ -1036,10 +1036,10 @@ class OptimizedLabReportParser:
                     unit = match.group('unit') if match.group('unit') else None
                     reference_range = match.group('reference_range') if match.group('reference_range') else None
 
-                    # Normalise flag: 'H H' → 'H', Cyrillic 'Н' → 'H'
+                    # Normalise flag: 'H H' → 'H', Cyrillic 'Н' → 'H', OCR '1' → 'H'
                     if flag:
                         flag = flag.strip().split()[0].upper()
-                        if flag in ('Н', 'н'):
+                        if flag in ('Н', 'н', '1'):
                             flag = 'H'
 
                     # If no flag from inline regex, check if there's a flag line nearby
