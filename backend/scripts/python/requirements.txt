@@ -16,3 +16,6 @@ kiri-ocr>=0.2.15
 # For GPU builds, paddlepaddle is swapped with paddlepaddle-gpu in the Dockerfile
 paddlepaddle==3.3.1
 paddleocr==3.5.0
+
+# HTTP client for local Ollama LLM API calls
+requests>=2.31.0

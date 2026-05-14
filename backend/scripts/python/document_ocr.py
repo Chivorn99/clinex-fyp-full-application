@@ -123,6 +123,255 @@ def _get_kiri_config() -> Dict[str, Any]:
     }
 
 
+def _get_ollama_config() -> Dict[str, Any]:
+    """Load Ollama LLM configuration from environment."""
+    base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    dotenv_path = os.path.join(base_path, '.env')
+
+    def get_config_value(key: str, default: Optional[str] = None) -> Optional[str]:
+        return os.getenv(key) or _read_env_value_from_dotenv(dotenv_path, key) or default
+
+    enabled = get_config_value('OLLAMA_ENABLED', 'false').lower() in ('true', '1', 'yes')
+    host = get_config_value('OLLAMA_HOST', 'http://ollama:11434')
+    model = get_config_value('OLLAMA_MODEL', 'phi3:mini')
+    timeout = int(get_config_value('OLLAMA_TIMEOUT', '60'))
+
+    return {
+        'enabled': enabled,
+        'host': host.rstrip('/'),
+        'model': model,
+        'timeout': timeout,
+    }
+
+
+def _build_llm_system_prompt(template: Dict[str, Any]) -> str:
+    """Build the system prompt for the LLM extraction task."""
+    schema = template.get('schema', {})
+    flag_enum = schema.get('flag_enum', ['H', 'L'])
+    categories = schema.get('test_categories', [])
+    hospital_phones = schema.get('hospital_phones_to_exclude', [])
+
+    return (
+        "You are a medical lab report data extractor. "
+        "Extract structured JSON from raw OCR text of Cambodian hospital lab reports.\n\n"
+        "STRICT RULES:\n"
+        f"1. Flag values MUST be exactly one of {flag_enum} or null. No other values allowed.\n"
+        "2. All dates must be in DD/MM/YYYY HH:MM format exactly as they appear.\n"
+        "3. Patient ID format: PT followed by digits (e.g. PT00139).\n"
+        "4. Lab ID format: LT followed by digits (e.g. LT00001).\n"
+        "5. Patient name must be in English uppercase (e.g. HENG VANNAT).\n"
+        "6. Gender must be exactly 'Male' or 'Female'.\n"
+        f"7. Test categories must be one of: {categories}\n"
+        f"8. Ignore hospital phone numbers: {hospital_phones}\n"
+        "9. The OCR text may contain garbled Khmer Unicode characters before English labels "
+        "(e.g. 'កម់:/Name' means 'Name'). Extract the English value after the label.\n"
+        "10. If a value cannot be determined from the text, use null.\n"
+        "11. For test results, extract the numeric value or NEGATIVE/POSITIVE exactly as shown.\n"
+        "12. 'BIOCHIMISTRY' is a misspelling of 'BIOCHEMISTRY' — normalize to 'BIOCHEMISTRY'.\n"
+    )
+
+
+def _build_llm_user_prompt(raw_text: str, template: Dict[str, Any]) -> str:
+    """Build the user prompt with raw OCR text and few-shot examples."""
+    examples = template.get('few_shot_examples', [])
+
+    prompt_parts = ["Extract all structured data from this lab report OCR text.\n"]
+
+    if examples:
+        prompt_parts.append("=== FEW-SHOT EXAMPLES ===\n")
+        for i, ex in enumerate(examples[:2], 1):
+            prompt_parts.append(f"--- Example {i} Input ---\n{ex['input']}\n")
+            prompt_parts.append(f"--- Example {i} Output ---\n{json.dumps(ex['output'], ensure_ascii=False)}\n")
+
+    prompt_parts.append("=== ACTUAL LAB REPORT TO EXTRACT ===\n")
+    prompt_parts.append(raw_text)
+
+    return "\n".join(prompt_parts)
+
+
+def _get_ollama_json_schema() -> Dict[str, Any]:
+    """Return the JSON schema for Ollama structured output."""
+    test_result_schema = {
+        "type": "object",
+        "properties": {
+            "testName": {"type": "string"},
+            "result": {"type": "string"},
+            "unit": {"type": ["string", "null"]},
+            "referenceRange": {"type": ["string", "null"]},
+            "flag": {"type": ["string", "null"], "enum": ["H", "L", None]},
+            "category": {"type": "string"}
+        },
+        "required": ["testName", "result", "category"]
+    }
+
+    return {
+        "type": "object",
+        "properties": {
+            "patientInfo": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": ["string", "null"]},
+                    "patientId": {"type": ["string", "null"]},
+                    "age": {"type": ["string", "null"]},
+                    "gender": {"type": ["string", "null"]},
+                    "phone": {"type": ["string", "null"]}
+                },
+                "required": ["name", "patientId", "age", "gender", "phone"]
+            },
+            "labInfo": {
+                "type": "object",
+                "properties": {
+                    "labId": {"type": ["string", "null"]},
+                    "requestedBy": {"type": ["string", "null"]},
+                    "requestedDate": {"type": ["string", "null"]},
+                    "collectedDate": {"type": ["string", "null"]},
+                    "analysisDate": {"type": ["string", "null"]},
+                    "validatedBy": {"type": ["string", "null"]}
+                },
+                "required": ["labId", "requestedBy"]
+            },
+            "testResults": {
+                "type": "array",
+                "items": test_result_schema
+            }
+        },
+        "required": ["patientInfo", "labInfo", "testResults"]
+    }
+
+
+def extract_with_llm(raw_text: str, template: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Send raw OCR text to local Ollama LLM for structured extraction.
+
+    Returns parsed result dict on success, or None on failure (so caller
+    can fall back to regex parser).
+    """
+    try:
+        import requests as http_requests
+    except ImportError:
+        print('DEBUG: requests library not installed, cannot call Ollama', file=sys.stderr)
+        return None
+
+    ollama_config = _get_ollama_config()
+    if not ollama_config['enabled']:
+        print('DEBUG: Ollama LLM disabled in config', file=sys.stderr)
+        return None
+
+    model = template.get('llm_model', ollama_config['model'])
+    api_url = f"{ollama_config['host']}/api/chat"
+
+    system_prompt = _build_llm_system_prompt(template)
+    user_prompt = _build_llm_user_prompt(raw_text, template)
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "format": _get_ollama_json_schema(),
+        "stream": False,
+        "options": {
+            "temperature": 0,
+            "num_ctx": 4096,
+        }
+    }
+
+    try:
+        print(f'DEBUG: Calling Ollama ({model}) at {api_url}...', file=sys.stderr)
+        start = time.time()
+        resp = http_requests.post(
+            api_url,
+            json=payload,
+            timeout=ollama_config['timeout']
+        )
+        elapsed = time.time() - start
+        print(f'DEBUG: Ollama responded in {elapsed:.1f}s (status {resp.status_code})', file=sys.stderr)
+
+        if resp.status_code != 200:
+            print(f'DEBUG: Ollama error: {resp.text[:500]}', file=sys.stderr)
+            return None
+
+        response_data = resp.json()
+        content = response_data.get('message', {}).get('content', '')
+
+        if not content:
+            print('DEBUG: Ollama returned empty content', file=sys.stderr)
+            return None
+
+        # Parse the JSON content from the LLM response
+        result = json.loads(content) if isinstance(content, str) else content
+        print(f'DEBUG: Ollama extracted {len(result.get("testResults", []))} test results', file=sys.stderr)
+        return result
+
+    except http_requests.exceptions.ConnectionError:
+        print('DEBUG: Ollama unreachable (connection refused) — falling back to regex', file=sys.stderr)
+        return None
+    except http_requests.exceptions.Timeout:
+        print(f'DEBUG: Ollama timed out after {ollama_config["timeout"]}s', file=sys.stderr)
+        return None
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        print(f'DEBUG: Failed to parse Ollama response: {e}', file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f'DEBUG: Ollama call failed unexpectedly: {e}', file=sys.stderr)
+        return None
+
+
+def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Post-LLM validation to catch hallucinations and normalize values.
+
+    This is a critical safety net for medical data — never trust raw LLM
+    output without validation.
+    """
+    # 1. Flag normalization — force to enum
+    for test in result.get('testResults', []):
+        flag = test.get('flag')
+        if flag is not None:
+            flag_upper = str(flag).strip().upper()
+            if flag_upper in ('H', 'L'):
+                test['flag'] = flag_upper
+            else:
+                test['flag'] = None  # Strip invalid flags
+
+    # 2. Patient ID format validation
+    patient_info = result.get('patientInfo', {})
+    pid = patient_info.get('patientId', '')
+    if pid and not re.match(r'^PT\d+$', str(pid)):
+        patient_info['patientId'] = None
+
+    # 3. Lab ID format validation
+    lab_info = result.get('labInfo', {})
+    lid = lab_info.get('labId', '')
+    if lid and not re.match(r'^LT\d+$', str(lid)):
+        lab_info['labId'] = None
+
+    # 4. Gender normalization
+    gender = patient_info.get('gender', '')
+    if gender:
+        gender_lower = str(gender).strip().lower()
+        if gender_lower in ('male', 'm'):
+            patient_info['gender'] = 'Male'
+        elif gender_lower in ('female', 'f'):
+            patient_info['gender'] = 'Female'
+        else:
+            patient_info['gender'] = None
+
+    # 5. Category normalization
+    for test in result.get('testResults', []):
+        cat = test.get('category', '')
+        if cat:
+            cat_upper = str(cat).upper().strip()
+            cat_upper = cat_upper.replace('BIOCHIMISTRY', 'BIOCHEMISTRY')
+            test['category'] = cat_upper
+
+    # 6. Strip empty string values → null
+    for section in [patient_info, lab_info]:
+        for k, v in section.items():
+            if isinstance(v, str) and not v.strip():
+                section[k] = None
+
+    return result
+
 
 def _infer_mime_type(file_path: str) -> str:
     extension = Path(file_path).suffix.lower()
@@ -1367,13 +1616,14 @@ def extract_text_from_pdf_local(pdf_path: str) -> str:
     except Exception as e:
         raise Exception(f'All PDF extraction methods failed. Last error: {str(e)}')
 
-def process_single_file(file_path: str) -> Dict[str, Any]:
+def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     paddle_config = {}
     kiri_config = {}
     ocr_text = None
     confidence = 0.0
     ocr_engine = 'unknown'
     parser = None
+    extraction_method = 'regex'
     
     try:
         mime_type = _infer_mime_type(file_path)
@@ -1474,11 +1724,26 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
                 ocr_text = f.read()
             ocr_engine = 'text'
 
-        parser = OptimizedLabReportParser()
-        result = parser.parse_optimized(ocr_text)
+        # ── Intelligence Layer: LLM-first, regex-fallback ──
+        result = None
+        if template:
+            llm_result = extract_with_llm(ocr_text, template)
+            if llm_result:
+                result = validate_extraction(llm_result)
+                extraction_method = 'llm'
+                print(f'DEBUG: LLM extraction succeeded — {len(result.get("testResults", []))} tests', file=sys.stderr)
+
+        # Fallback to regex parser if LLM failed or no template
+        if result is None:
+            parser = OptimizedLabReportParser()
+            result = parser.parse_optimized(ocr_text)
+            extraction_method = 'regex'
+            print(f'DEBUG: Using regex parser (fallback)', file=sys.stderr)
+
         result['source_file'] = os.path.basename(file_path)
         result['success'] = True
         result['ocr_engine'] = ocr_engine
+        result['extraction_method'] = extraction_method
         result['rawText'] = ocr_text
         result['confidence'] = confidence
         return result
@@ -1489,25 +1754,30 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
             'success': False,
             'rawText': ocr_text,
             'ocr_engine': ocr_engine,
+            'extraction_method': extraction_method,
             'debug': {
                 'ocr_length': len(ocr_text) if ocr_text else 0,
                 'failed_patterns': getattr(parser, 'failed_patterns', []) if parser else []
             }
         }
 
-def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
-    if max_workers is None:
+def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = None, template: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    # When using LLM, serialize to avoid GPU contention
+    if template and max_workers is None:
+        max_workers = 1
+    elif max_workers is None:
         max_workers = min(len(file_paths), 3)
-    print(f'DEBUG: Processing {len(file_paths)} files with {max_workers} workers (PaddleOCR + Google fallback)', file=sys.stderr)
+    engine_desc = 'LLM + PaddleOCR' if template else 'PaddleOCR + Google fallback'
+    print(f'DEBUG: Processing {len(file_paths)} files with {max_workers} workers ({engine_desc})', file=sys.stderr)
     start_time = time.time()
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_file = {executor.submit(process_single_file, file_path): file_path for file_path in file_paths}
+        future_to_file = {executor.submit(process_single_file, fp, template): fp for fp in file_paths}
         for future in concurrent.futures.as_completed(future_to_file):
             try:
                 result = future.result()
                 results.append(result)
-                print(f'DEBUG: Completed {result.get("source_file", "unknown")}', file=sys.stderr)
+                print(f'DEBUG: Completed {result.get("source_file", "unknown")} via {result.get("extraction_method", "unknown")}', file=sys.stderr)
             except Exception as e:
                 file_path = future_to_file[future]
                 results.append({
@@ -1520,38 +1790,45 @@ def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = N
     return results
 
 def main():
-    parser = argparse.ArgumentParser(description='Parse lab report OCR text with PaddleOCR + Google Document AI fallback')
+    parser = argparse.ArgumentParser(description='Smart OCR Intelligence Layer — PaddleOCR + Ollama LLM')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--file', help='Single file to process')
     group.add_argument('--batch', help='Directory containing OCR files')
     group.add_argument('--file-list', help='Text file containing list of files to process')
     parser.add_argument('--output-format', choices=['json', 'pretty'], default='json')
-    parser.add_argument('--workers', type=int, default=3, help='Number of parallel workers (max 3 for API limits)')
+    parser.add_argument('--workers', type=int, default=None, help='Parallel workers (default: 1 for LLM, 3 for regex)')
     parser.add_argument('--output-file', help='Output file (default: stdout)')
+    parser.add_argument('--template', help='Path to JSON file with report template for LLM extraction')
     args = parser.parse_args()
+
+    # Load template if provided
+    template = None
+    if args.template:
+        try:
+            with open(args.template, 'r', encoding='utf-8') as tf:
+                template = json.load(tf)
+            print(f'DEBUG: Loaded report template: {template.get("name", "unknown")}', file=sys.stderr)
+        except Exception as e:
+            print(f'DEBUG: Failed to load template ({e}), proceeding without LLM', file=sys.stderr)
+
     results = []
     try:
         if args.file:
-            result = process_single_file(args.file)
+            result = process_single_file(args.file, template)
             results = [result]
         elif args.batch:
             batch_dir = Path(args.batch)
             file_paths = []
-            file_paths.extend([str(f) for f in batch_dir.glob('*.pdf')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.jpg')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.jpeg')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.png')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.tif')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.tiff')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.txt')])
+            for ext in ['*.pdf', '*.jpg', '*.jpeg', '*.png', '*.tif', '*.tiff', '*.txt']:
+                file_paths.extend([str(f) for f in batch_dir.glob(ext)])
             print(f'DEBUG: Found {len(file_paths)} files to process', file=sys.stderr)
             if not file_paths:
                 raise Exception(f'No supported files (PDF/Image/TXT) found in {batch_dir}')
-            results = process_batch_parallel(file_paths, args.workers)
+            results = process_batch_parallel(file_paths, args.workers, template)
         elif args.file_list:
             with open(args.file_list, 'r') as f:
                 file_paths = [line.strip() for line in f if line.strip()]
-            results = process_batch_parallel(file_paths, args.workers)
+            results = process_batch_parallel(file_paths, args.workers, template)
         if args.output_format == 'json':
             output = json.dumps(results, ensure_ascii=False)
         else:
@@ -1568,3 +1845,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

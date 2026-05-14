@@ -101,6 +101,45 @@ Route::middleware('auth:sanctum')->prefix('patients')->name('patients.')->group(
     Route::get('/{patient}/lab-reports', [PatientController::class, 'labReports'])->name('lab-reports');
 });
 
+// ─── Admin Panel Routes ──────────────────────────────────────────
+// Each sub-group is gated by a specific RBAC permission.
+// Admin role auto-passes all permission checks.
+Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(function () {
+    // Dashboard overview (requires view_analytics)
+    Route::get('/dashboard', [App\Http\Controllers\AdminController::class, 'dashboard'])
+        ->middleware('permission:view_analytics')
+        ->name('dashboard');
+
+    // User management (requires manage_users)
+    Route::prefix('users')->middleware('permission:manage_users')->name('users.')->group(function () {
+        Route::get('/', [App\Http\Controllers\AdminController::class, 'listUsers'])->name('index');
+        Route::patch('/{user}/role', [App\Http\Controllers\AdminController::class, 'updateUserRole'])->name('update-role');
+        Route::patch('/{user}/permissions', [App\Http\Controllers\AdminController::class, 'updateUserPermissions'])->name('update-permissions');
+        Route::delete('/{user}', [App\Http\Controllers\AdminController::class, 'deleteUser'])->name('destroy');
+    });
+
+    // Template management (requires manage_templates)
+    Route::prefix('templates')->middleware('permission:manage_templates')->name('templates.')->group(function () {
+        Route::get('/', [App\Http\Controllers\AdminController::class, 'listTemplates'])->name('index');
+        Route::post('/', [App\Http\Controllers\AdminController::class, 'createTemplate'])->name('store');
+        Route::patch('/{template}', [App\Http\Controllers\AdminController::class, 'updateTemplate'])->name('update');
+        Route::post('/{template}/toggle', [App\Http\Controllers\AdminController::class, 'toggleTemplate'])->name('toggle');
+        Route::delete('/{template}', [App\Http\Controllers\AdminController::class, 'deleteTemplate'])->name('destroy');
+    });
+
+    // Report oversight (requires manage_reports)
+    Route::prefix('reports')->middleware('permission:manage_reports')->name('reports.')->group(function () {
+        Route::get('/', [App\Http\Controllers\AdminController::class, 'listReports'])->name('index');
+        Route::post('/bulk-delete', [App\Http\Controllers\AdminController::class, 'bulkDeleteReports'])->name('bulk-delete');
+        Route::post('/bulk-reprocess', [App\Http\Controllers\AdminController::class, 'bulkReprocessReports'])->name('bulk-reprocess');
+    });
+
+    // System health (requires view_system_health)
+    Route::get('/system-health', [App\Http\Controllers\AdminController::class, 'systemHealth'])
+        ->middleware('permission:view_system_health')
+        ->name('system-health');
+});
+
 // Health check route (optional but useful)
 Route::get('/health', function () {
     return response()->json([

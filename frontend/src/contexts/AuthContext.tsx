@@ -2,11 +2,12 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
-interface User {
+export interface User {
   id: string
   name: string
   email: string
   role: string
+  permissions?: Record<string, boolean>
   phone_number?: string
   specialization?: string
   created_at?: string
@@ -19,6 +20,8 @@ interface AuthContextType {
   login: (token: string, userData: User) => void
   logout: () => void
   isLoading: boolean
+  hasPermission: (permission: string) => boolean
+  hasAnyPermission: (permissions: string[]) => boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -73,8 +76,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(userData)
   }
 
+  /**
+   * Check if the current user has a specific permission.
+   * Admin role automatically has ALL permissions.
+   */
+  const hasPermission = useCallback((permission: string): boolean => {
+    if (!user) return false
+    if (user.role === 'admin') return true
+    return !!user.permissions?.[permission]
+  }, [user])
+
+  /**
+   * Check if the current user has ANY of the given permissions.
+   */
+  const hasAnyPermission = useCallback((permissions: string[]): boolean => {
+    return permissions.some(p => hasPermission(p))
+  }, [hasPermission])
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, logout, isLoading, hasPermission, hasAnyPermission }}>
       {children}
     </AuthContext.Provider>
   )

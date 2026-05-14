@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-import { Menu, X, User, LogOut } from 'lucide-react'
+import { Menu, X, User, LogOut, Shield } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
 
@@ -9,7 +9,8 @@ export default function Navbar() {
     const [isMenuOpen, setIsMenuOpen] = useState(false)
     const [isProfileOpen, setIsProfileOpen] = useState(false)
     const [isLoggingOut, setIsLoggingOut] = useState(false)
-    const { user, logout } = useAuth()
+    const { user, logout, hasAnyPermission } = useAuth()
+    const showAdminLink = hasAnyPermission(['manage_users', 'manage_templates', 'manage_reports', 'view_analytics', 'view_system_health'])
 
     const handleLogout = async () => {
         setIsLoggingOut(true)
@@ -89,6 +90,15 @@ export default function Navbar() {
                             >
                                 Upload
                             </Link>
+                            {showAdminLink && (
+                                <Link
+                                    href="/admin"
+                                    className="border-transparent text-indigo-500 hover:border-indigo-300 hover:text-indigo-700 inline-flex items-center gap-1 px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200"
+                                >
+                                    <Shield className="h-3.5 w-3.5" />
+                                    Admin
+                                </Link>
+                            )}
                         </div>
                     </div>
 
@@ -195,6 +205,15 @@ export default function Navbar() {
                     >
                         Upload
                     </Link>
+                    {showAdminLink && (
+                        <Link
+                            href="/admin"
+                            className="text-indigo-500 hover:text-indigo-700 flex items-center gap-2 px-3 py-2 text-base font-medium transition-colors duration-200 hover:bg-indigo-50 rounded-md"
+                        >
+                            <Shield className="h-4 w-4" />
+                            Admin Panel
+                        </Link>
+                    )}
                 </div>
             </div>
         </nav>

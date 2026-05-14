@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\ReportBatch;
+use App\Models\ReportTemplate;
 use App\Jobs\ProcessSingleLabReport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -93,6 +94,16 @@ class ProcessLabReportBatch implements ShouldQueue
             'json'
         ];
 
+        // Load active report template for LLM extraction
+        $templateFile = null;
+        $activeTemplate = ReportTemplate::getActive();
+        if ($activeTemplate) {
+            $templateFile = storage_path('app/private/template_batch_' . $this->reportBatch->id . '.json');
+            file_put_contents($templateFile, json_encode($activeTemplate->toPythonPayload()));
+            $command[] = '--template';
+            $command[] = $templateFile;
+        }
+
         Log::info('Starting parallel OCR processing', [
             'batch_id' => $this->reportBatch->id,
             'command' => implode(' ', $command),
@@ -124,6 +135,10 @@ class ProcessLabReportBatch implements ShouldQueue
             'PADDLE_OCR_CONFIDENCE_THRESHOLD' => env('PADDLE_OCR_CONFIDENCE_THRESHOLD', '0.85'),
             'PADDLE_OCR_DEVICE' => env('PADDLE_OCR_DEVICE', 'auto'),
             'PADDLE_OCR_GPU_ID' => env('PADDLE_OCR_GPU_ID', '0'),
+            'OLLAMA_ENABLED' => env('OLLAMA_ENABLED', 'false'),
+            'OLLAMA_HOST' => env('OLLAMA_HOST', 'http://ollama:11434'),
+            'OLLAMA_MODEL' => env('OLLAMA_MODEL', 'phi3:mini'),
+            'OLLAMA_TIMEOUT' => env('OLLAMA_TIMEOUT', '60'),
         ]);
         $process->setEnv($env);
 
@@ -160,6 +175,11 @@ class ProcessLabReportBatch implements ShouldQueue
             'batch_id' => $this->reportBatch->id,
             'results_count' => count($results)
         ]);
+
+        // Clean up temp template file
+        if ($templateFile && file_exists($templateFile)) {
+            unlink($templateFile);
+        }
 
         // Process results and update database
         $this->updateLabReportsFromResults($results);
