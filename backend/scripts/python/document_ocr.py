@@ -323,7 +323,7 @@ def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
     This is a critical safety net for medical data — never trust raw LLM
     output without validation.
     """
-    # 1. Flag normalization — force to enum
+    # Flag normalization — force to enum
     for test in result.get('testResults', []):
         flag = test.get('flag')
         if flag is not None:
@@ -331,21 +331,21 @@ def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
             if flag_upper in ('H', 'L'):
                 test['flag'] = flag_upper
             else:
-                test['flag'] = None  # Strip invalid flags
+                test['flag'] = None
 
-    # 2. Patient ID format validation
+    # Patient ID format validation
     patient_info = result.get('patientInfo', {})
     pid = patient_info.get('patientId', '')
     if pid and not re.match(r'^PT\d+$', str(pid)):
         patient_info['patientId'] = None
 
-    # 3. Lab ID format validation
+    # Lab ID format validation
     lab_info = result.get('labInfo', {})
     lid = lab_info.get('labId', '')
     if lid and not re.match(r'^LT\d+$', str(lid)):
         lab_info['labId'] = None
 
-    # 4. Gender normalization
+    # Gender normalization
     gender = patient_info.get('gender', '')
     if gender:
         gender_lower = str(gender).strip().lower()
@@ -356,7 +356,7 @@ def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
         else:
             patient_info['gender'] = None
 
-    # 5. Category normalization
+    # Category normalization
     for test in result.get('testResults', []):
         cat = test.get('category', '')
         if cat:
@@ -364,7 +364,7 @@ def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
             cat_upper = cat_upper.replace('BIOCHIMISTRY', 'BIOCHEMISTRY')
             test['category'] = cat_upper
 
-    # 6. Strip empty string values → null
+    # Strip empty string values → null
     for section in [patient_info, lab_info]:
         for k, v in section.items():
             if isinstance(v, str) and not v.strip():
@@ -407,7 +407,6 @@ def _preprocess_image_for_ocr(file_path: str) -> bytes:
         from PIL import Image, ImageFilter, ImageOps
 
         with Image.open(file_path) as image:
-            # Normalize orientation and boost readability for OCR.
             processed = ImageOps.exif_transpose(image)
             processed = processed.convert('L')
             processed = ImageOps.autocontrast(processed, cutoff=2)
@@ -450,7 +449,6 @@ def _flatten_paddle_lines(ocr_result: Any) -> List[Any]:
     elif hasattr(ocr_result, 'rec_texts'):
         rec_texts = getattr(ocr_result, 'rec_texts', None)
         rec_scores = getattr(ocr_result, 'rec_scores', None)
-    # Also try dict-like __getitem__ access (OCRResult supports this)
     elif hasattr(ocr_result, '__getitem__') and not isinstance(ocr_result, (list, tuple)):
         try:
             rec_texts = ocr_result['rec_texts']
@@ -467,7 +465,6 @@ def _flatten_paddle_lines(ocr_result: Any) -> List[Any]:
             flattened.append((None, (str(text), score)))
         return flattened
 
-    # v2.x list format: [[box, (text, score)], ...]
     if isinstance(ocr_result, list):
         if ocr_result and isinstance(ocr_result[0], list) and ocr_result[0] and isinstance(ocr_result[0][0], (list, tuple)):
             return ocr_result[0]
@@ -486,7 +483,6 @@ def _reconstruct_lines_from_polys(ocr_result: Any) -> tuple[str, float]:
     """
     import numpy as np
 
-    # Extract spatial data from OCRResult
     dt_polys = None
     rec_texts = None
     rec_scores = None
@@ -515,7 +511,6 @@ def _reconstruct_lines_from_polys(ocr_result: Any) -> tuple[str, float]:
     if not rec_scores:
         rec_scores = [0.0] * len(rec_texts)
 
-    # Build fragments with spatial position
     fragments = []
     for text, score, poly in zip(rec_texts, rec_scores, dt_polys):
         text = str(text).strip()
@@ -529,25 +524,22 @@ def _reconstruct_lines_from_polys(ocr_result: Any) -> tuple[str, float]:
     if not fragments:
         return '', 0.0
 
-    # Sort by Y then X
     fragments.sort(key=lambda f: (f[0], f[1]))
 
-    # Group by Y within tolerance (same visual line)
-    LINE_Y_TOLERANCE = 15  # pixels
+    LINE_Y_TOLERANCE = 15
     lines = []
     current_line = [fragments[0]]
     for frag in fragments[1:]:
         if abs(frag[0] - current_line[0][0]) < LINE_Y_TOLERANCE:
             current_line.append(frag)
         else:
-            current_line.sort(key=lambda f: f[1])  # left-to-right
+            current_line.sort(key=lambda f: f[1])
             lines.append(current_line)
             current_line = [frag]
     if current_line:
         current_line.sort(key=lambda f: f[1])
         lines.append(current_line)
 
-    # Join fragments on each line with spaces
     text_lines = []
     all_scores = []
     for line in lines:
@@ -566,7 +558,6 @@ def _parse_paddle_result(ocr_result: Any) -> tuple[str, float]:
     For v3.5 OCRResult with dt_polys, uses spatial reconstruction.
     For v2.x list results, falls back to sequential parsing.
     """
-    # Try spatial reconstruction first (v3.5 with polygon data)
     has_polys = False
     if isinstance(ocr_result, dict):
         has_polys = bool(ocr_result.get('dt_polys'))
@@ -584,7 +575,6 @@ def _parse_paddle_result(ocr_result: Any) -> tuple[str, float]:
         except Exception as e:
             print(f'DEBUG: Spatial reconstruction failed ({e}), falling back to sequential parse', file=sys.stderr)
 
-    # Fallback: sequential parsing for v2.x or when polys unavailable
     text_lines: List[str] = []
     confidences: List[float] = []
 
@@ -618,16 +608,14 @@ def _call_paddle_ocr(ocr: Any, file_path: str) -> Any:
     v3.5+: ocr.predict(file_path) -> iterator of OCRResult
     v2.x:  ocr.ocr(file_path, cls=True) -> list of results
     """
-    # Try v3.5+ predict() first
     if hasattr(ocr, 'predict'):
         try:
             results = list(ocr.predict(file_path))
             if results:
-                return results[0]  # OCRResult with rec_texts / rec_scores
+                return results[0] 
         except TypeError:
-            pass  # Fall through to legacy API
+            pass
 
-    # Legacy v2.x API
     if hasattr(ocr, 'ocr'):
         try:
             return ocr.ocr(file_path, cls=True)
@@ -640,9 +628,8 @@ def _call_paddle_ocr(ocr: Any, file_path: str) -> Any:
 def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
     """Extract text from document using PaddleOCR with confidence scoring."""
     try:
-        # Pre-load torch (if available) before paddle to avoid Windows DLL conflicts
         try:
-            import torch  # noqa: F401
+            import torch
         except ImportError:
             pass
         import paddle

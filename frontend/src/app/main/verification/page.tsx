@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useAuth } from '@/contexts/AuthContext';
 import {
   ArrowLeft,
   FileText,
@@ -1197,7 +1198,8 @@ export default function VerificationPage() {
                   </div>
                 </div>
 
-                {/* Raw OCR Text */}
+                {/* Raw OCR Text - Admin Only */}
+                {user?.role === 'admin' && (
                 <div className="bg-white shadow rounded-lg">
                   <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
                     <div>
@@ -1230,6 +1232,7 @@ export default function VerificationPage() {
                     )}
                   </div>
                 </div>
+                )}
 
                 {/* Test Results by Category */}
                 <div className="space-y-4">
