@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from "@/contexts/AuthContext";
 import {
   ArrowLeft,
   FileText,
@@ -15,7 +15,6 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/lib/api";
 
 // Interfaces
