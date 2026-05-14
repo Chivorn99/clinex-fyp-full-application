@@ -226,7 +226,7 @@ export default function TemplatesPage() {
               <input
                 name="name"
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                 placeholder="e.g., Hospital ABC Default"
               />
             </div>
@@ -235,7 +235,7 @@ export default function TemplatesPage() {
               <input
                 name="hospital_code"
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                 placeholder="e.g., HOSP_ABC"
               />
             </div>
@@ -243,7 +243,7 @@ export default function TemplatesPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">LLM Model</label>
               <select
                 name="llm_model"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
               >
                 <option value="phi3:mini">phi3:mini (3.8B — recommended)</option>
                 <option value="llama3:8b">llama3:8b (8B — better quality)</option>
@@ -257,7 +257,7 @@ export default function TemplatesPage() {
               name="schema"
               rows={4}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
               defaultValue={JSON.stringify(
                 {
                   fields: [
@@ -278,7 +278,7 @@ export default function TemplatesPage() {
             <textarea
               name="few_shot_examples"
               rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
               defaultValue="[]"
               placeholder="[]"
             />
@@ -395,7 +395,7 @@ export default function TemplatesPage() {
                       <input
                         value={(editForm.name as string) ?? ''}
                         onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                       />
                     </div>
                     <div>
@@ -403,7 +403,7 @@ export default function TemplatesPage() {
                       <input
                         value={(editForm.hospital_code as string) ?? ''}
                         onChange={(e) => setEditForm({ ...editForm, hospital_code: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                       />
                     </div>
                     <div>
@@ -411,7 +411,7 @@ export default function TemplatesPage() {
                       <select
                         value={(editForm.llm_model as string) ?? 'phi3:mini'}
                         onChange={(e) => setEditForm({ ...editForm, llm_model: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
                       >
                         <option value="phi3:mini">phi3:mini (3.8B)</option>
                         <option value="llama3:8b">llama3:8b (8B)</option>
@@ -425,7 +425,7 @@ export default function TemplatesPage() {
                       rows={6}
                       value={typeof editForm.schema === 'string' ? editForm.schema : JSON.stringify(editForm.schema, null, 2)}
                       onChange={(e) => setEditForm({ ...editForm, schema: e.target.value as unknown as Record<string, unknown> })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                     />
                   </div>
                   <div>
@@ -443,7 +443,7 @@ export default function TemplatesPage() {
                           few_shot_examples: e.target.value as unknown as Array<Record<string, unknown>>,
                         })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                     />
                   </div>
                   <div className="flex items-center gap-3">

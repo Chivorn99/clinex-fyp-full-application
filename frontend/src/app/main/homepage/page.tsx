@@ -41,17 +41,8 @@ export default function HomePage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
 
-    const mockUser = {
-        name: 'Dr. Sarah Johnson',
-        email: 'sarah@smithclinic.com',
-        clinic: 'Smith Medical Clinic'
-    }
-
-    const currentUser = user ? {
-        name: user.name,
-        email: user.email,
-        clinic: 'Smith Medical Clinic'
-    } : mockUser
+    const userName = user?.name || 'User'
+    const firstName = userName.split(' ')[0]
 
     // Fetch dashboard statistics
     useEffect(() => {
@@ -143,19 +134,19 @@ export default function HomePage() {
         {
             name: 'Total Patients',
             value: dashboardStats.totalPatients.toLocaleString(),
-            change: '+12%', // You can calculate this based on previous data
+            change: 'In system',
             changeType: 'increase' as const,
             icon: Users,
         },
         {
             name: "Today's Uploads",
             value: dashboardStats.todaysUploads.toString(),
-            change: `+${dashboardStats.todaysUploads}`,
-            changeType: 'increase' as const,
+            change: dashboardStats.todaysUploads > 0 ? `${dashboardStats.todaysUploads} new today` : 'None yet',
+            changeType: dashboardStats.todaysUploads > 0 ? 'increase' as const : 'decrease' as const,
             icon: Calendar,
         },
         {
-            name: 'Pending Reports',
+            name: 'Pending Verification',
             value: dashboardStats.pendingReports.toString(),
             change: dashboardStats.pendingReports > 0 ? `${dashboardStats.pendingReports} awaiting` : 'All clear',
             changeType: dashboardStats.pendingReports > 0 ? 'increase' as const : 'decrease' as const,
@@ -164,7 +155,7 @@ export default function HomePage() {
         {
             name: 'This Month',
             value: dashboardStats.monthlyReports.toString(),
-            change: '+8.2%', // You can calculate this based on previous month
+            change: `${dashboardStats.monthlyReports} reports`,
             changeType: 'increase' as const,
             icon: TrendingUp,
         },
@@ -203,10 +194,10 @@ export default function HomePage() {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <h1 className="text-3xl font-bold text-gray-900">
-                                        Welcome back, {currentUser.name.split(' ')[1] || currentUser.name}! 👋
+                                        Welcome back, {firstName}! 👋
                                     </h1>
                                     <p className="mt-2 text-gray-600">
-                                        Here&apos;s what&apos;s happening at {currentUser.clinic} today
+                                        Here&apos;s your overview for today
                                     </p>
                                     {error && (
                                         <p className="mt-2 text-sm text-red-600">

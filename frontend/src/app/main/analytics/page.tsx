@@ -315,7 +315,7 @@ export default function AnalyticsPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Information Dashboard</h1>
+                        <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
                         <p className="mt-1 text-gray-600">
                             Comprehensive insights into your lab report processing system
                         </p>

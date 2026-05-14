@@ -363,7 +363,7 @@ export default function UploadPage() {
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">Lab Report Batch Upload</h1>
                     <p className="mt-2 text-gray-600">
-                        Upload multiple lab report PDFs for automated processing
+                        Upload lab report PDFs or images for automated processing
                     </p>
                 </div>
 
