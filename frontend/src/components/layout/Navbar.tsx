@@ -1,15 +1,33 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-import { Menu, X, User, LogOut } from 'lucide-react'
+import { usePathname } from 'next/navigation'
+import { Menu, X, User, LogOut, Shield, Upload, Layers, FileText, Users, BarChart3 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
+
+// Navigation items in logical lab workflow order
+const NAV_ITEMS = [
+    { href: '/main/homepage', label: 'Dashboard', icon: null },
+    { href: '/main/upload', label: 'Upload', icon: Upload },
+    { href: '/main/verification/monitoring', label: 'Batch', icon: Layers },
+    { href: '/main/reports', label: 'Reports', icon: FileText },
+    { href: '/main/patient', label: 'Patients', icon: Users },
+    { href: '/main/analytics', label: 'Analytics', icon: BarChart3 },
+]
 
 export default function Navbar() {
     const [isMenuOpen, setIsMenuOpen] = useState(false)
     const [isProfileOpen, setIsProfileOpen] = useState(false)
     const [isLoggingOut, setIsLoggingOut] = useState(false)
-    const { user, logout } = useAuth()
+    const { user, logout, hasAnyPermission } = useAuth()
+    const pathname = usePathname()
+    const showAdminLink = hasAnyPermission(['manage_users', 'manage_templates', 'manage_reports', 'view_analytics', 'view_system_health'])
+
+    const isActive = (href: string) => {
+        if (href === '/main/homepage') return pathname === '/main/homepage'
+        return pathname.startsWith(href)
+    }
 
     const handleLogout = async () => {
         setIsLoggingOut(true)
@@ -53,42 +71,35 @@ export default function Navbar() {
 
                         {/* Desktop Navigation */}
                         <div className="hidden md:ml-8 md:flex md:space-x-8">
-                            <Link
-                                href="/main/homepage"
-                                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200"
-                            >
-                                Dashboard
-                            </Link>
-                            <Link
-                                href="/main/patient"
-                                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200"
-                            >
-                                Patients
-                            </Link>
-                            <Link
-                                href="/main/reports"
-                                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200"
-                            >
-                                Reports
-                            </Link>
-                            <Link
-                                href="/main/verification/monitoring"
-                                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200"
-                            >
-                                Batch
-                            </Link>
-                            <Link
-                                href="/main/analytics"
-                                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200"
-                            >
-                                Information
-                            </Link>
-                            <Link
-                                href="/main/upload"
-                                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200"
-                            >
-                                Upload
-                            </Link>
+                            {NAV_ITEMS.map((item) => {
+                                const active = isActive(item.href)
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200 ${
+                                            active
+                                                ? 'border-blue-500 text-blue-600'
+                                                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                                        }`}
+                                    >
+                                        {item.label}
+                                    </Link>
+                                )
+                            })}
+                            {showAdminLink && (
+                                <Link
+                                    href="/admin"
+                                    className={`inline-flex items-center gap-1 px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200 ${
+                                        pathname.startsWith('/admin')
+                                            ? 'border-indigo-500 text-indigo-600'
+                                            : 'border-transparent text-indigo-500 hover:border-indigo-300 hover:text-indigo-700'
+                                    }`}
+                                >
+                                    <Shield className="h-3.5 w-3.5" />
+                                    Admin
+                                </Link>
+                            )}
                         </div>
                     </div>
 
@@ -123,13 +134,6 @@ export default function Navbar() {
                                             <User className="h-4 w-4 mr-3" />
                                             Profile
                                         </Link>
-                                        {/* <Link
-                                            href="/settings"
-                                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150"
-                                        >
-                                            <Settings className="h-4 w-4 mr-3" />
-                                            Settings
-                                        </Link> */}
                                         <button
                                             onClick={handleLogout}
                                             disabled={isLoggingOut}
@@ -169,32 +173,41 @@ export default function Navbar() {
             </div>
 
             {/* Mobile Navigation */}
-            <div className={`md:hidden transition-all duration-300 ease-in-out ${isMenuOpen ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+            <div className={`md:hidden transition-all duration-300 ease-in-out ${isMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
                 <div className="pt-2 pb-3 space-y-1 sm:px-3">
-                    <Link
-                        href="/main/homepage"
-                        className="text-gray-500 hover:text-gray-700 block px-3 py-2 text-base font-medium transition-colors duration-200 hover:bg-gray-50 rounded-md"
-                    >
-                        Dashboard
-                    </Link>
-                    <Link
-                        href="/patients"
-                        className="text-gray-500 hover:text-gray-700 block px-3 py-2 text-base font-medium transition-colors duration-200 hover:bg-gray-50 rounded-md"
-                    >
-                        Patients
-                    </Link>
-                    <Link
-                        href="/main/reports"
-                        className="text-gray-500 hover:text-gray-700 block px-3 py-2 text-base font-medium transition-colors duration-200 hover:bg-gray-50 rounded-md"
-                    >
-                        Reports
-                    </Link>
-                    <Link
-                        href="/main/upload"
-                        className="text-gray-500 hover:text-gray-700 block px-3 py-2 text-base font-medium transition-colors duration-200 hover:bg-gray-50 rounded-md"
-                    >
-                        Upload
-                    </Link>
+                    {NAV_ITEMS.map((item) => {
+                        const active = isActive(item.href)
+                        const Icon = item.icon
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                onClick={() => setIsMenuOpen(false)}
+                                className={`flex items-center gap-2 px-3 py-2 text-base font-medium transition-colors duration-200 rounded-md ${
+                                    active
+                                        ? 'text-blue-700 bg-blue-50'
+                                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                }`}
+                            >
+                                {Icon && <Icon className="h-4 w-4" />}
+                                {item.label}
+                            </Link>
+                        )
+                    })}
+                    {showAdminLink && (
+                        <Link
+                            href="/admin"
+                            onClick={() => setIsMenuOpen(false)}
+                            className={`flex items-center gap-2 px-3 py-2 text-base font-medium transition-colors duration-200 rounded-md ${
+                                pathname.startsWith('/admin')
+                                    ? 'text-indigo-700 bg-indigo-50'
+                                    : 'text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50'
+                            }`}
+                        >
+                            <Shield className="h-4 w-4" />
+                            Admin Panel
+                        </Link>
+                    )}
                 </div>
             </div>
         </nav>

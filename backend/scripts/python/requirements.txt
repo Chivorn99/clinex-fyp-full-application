@@ -11,7 +11,11 @@ numpy>=1.21.0
 # Transformer-based model optimized for Khmer + English text
 kiri-ocr>=0.2.15
 
-# PaddleOCR is optional — only install if you need the fallback OCR engine.
-# It requires Python 3.10-3.12 and paddlepaddle, which may not be
-# available on all platforms.
-# To install: pip install paddlepaddle>=3.0.0 paddleocr>=2.10.0
+# PaddleOCR (local OCR engine for structured English + numeric lab data)
+# Requires Python 3.10-3.12 (Bookworm ships 3.11)
+# For GPU builds, paddlepaddle is swapped with paddlepaddle-gpu in the Dockerfile
+paddlepaddle==3.3.1
+paddleocr==3.5.0
+
+# HTTP client for local Ollama LLM API calls
+requests>=2.31.0

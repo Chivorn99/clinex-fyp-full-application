@@ -4,6 +4,7 @@ import re
 import argparse
 import concurrent.futures
 import mimetypes
+import inspect
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 import time
@@ -73,12 +74,34 @@ def _get_paddle_config() -> Dict[str, Any]:
     enabled = get_config_value('PADDLE_OCR_ENABLED', 'false').lower() in ('true', '1', 'yes')
     language = get_config_value('PADDLE_OCR_LANGUAGE', 'ch')
     confidence_threshold = float(get_config_value('PADDLE_OCR_CONFIDENCE_THRESHOLD', '0.85'))
+    device = (get_config_value('PADDLE_OCR_DEVICE', 'auto') or 'auto').strip().lower()
+    gpu_id = (get_config_value('PADDLE_OCR_GPU_ID', '0') or '0').strip()
 
     return {
         'enabled': enabled,
         'language': language,
         'confidence_threshold': confidence_threshold,
+        # Device selection:
+        # - auto: try GPU first (if Paddle is CUDA-enabled + GPU present), else CPU
+        # - gpu:  try GPU first, else CPU
+        # - cpu:  force CPU
+        'device': device,
+        'gpu_id': gpu_id,
     }
+
+
+def _select_paddle_device(paddle_config: Dict[str, Any]) -> str:
+    device = str(paddle_config.get('device', 'auto') or 'auto').strip().lower()
+    gpu_id = str(paddle_config.get('gpu_id', '0') or '0').strip()
+    gpu_device = f'gpu:{gpu_id}' if gpu_id.isdigit() else 'gpu:0'
+
+    if device == 'cpu':
+        return 'cpu'
+    if device in {'gpu', 'cuda', 'auto'}:
+        return gpu_device
+    # Unknown value — default to CPU for safety
+    print(f'DEBUG: Unknown PADDLE_OCR_DEVICE value "{device}", defaulting to CPU', file=sys.stderr)
+    return 'cpu'
 
 
 def _get_kiri_config() -> Dict[str, Any]:
@@ -99,6 +122,255 @@ def _get_kiri_config() -> Dict[str, Any]:
         'confidence_threshold': confidence_threshold,
     }
 
+
+def _get_ollama_config() -> Dict[str, Any]:
+    """Load Ollama LLM configuration from environment."""
+    base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    dotenv_path = os.path.join(base_path, '.env')
+
+    def get_config_value(key: str, default: Optional[str] = None) -> Optional[str]:
+        return os.getenv(key) or _read_env_value_from_dotenv(dotenv_path, key) or default
+
+    enabled = get_config_value('OLLAMA_ENABLED', 'false').lower() in ('true', '1', 'yes')
+    host = get_config_value('OLLAMA_HOST', 'http://ollama:11434')
+    model = get_config_value('OLLAMA_MODEL', 'phi3:mini')
+    timeout = int(get_config_value('OLLAMA_TIMEOUT', '60'))
+
+    return {
+        'enabled': enabled,
+        'host': host.rstrip('/'),
+        'model': model,
+        'timeout': timeout,
+    }
+
+
+def _build_llm_system_prompt(template: Dict[str, Any]) -> str:
+    """Build the system prompt for the LLM extraction task."""
+    schema = template.get('schema', {})
+    flag_enum = schema.get('flag_enum', ['H', 'L'])
+    categories = schema.get('test_categories', [])
+    hospital_phones = schema.get('hospital_phones_to_exclude', [])
+
+    return (
+        "You are a medical lab report data extractor. "
+        "Extract structured JSON from raw OCR text of Cambodian hospital lab reports.\n\n"
+        "STRICT RULES:\n"
+        f"1. Flag values MUST be exactly one of {flag_enum} or null. No other values allowed.\n"
+        "2. All dates must be in DD/MM/YYYY HH:MM format exactly as they appear.\n"
+        "3. Patient ID format: PT followed by digits (e.g. PT00139).\n"
+        "4. Lab ID format: LT followed by digits (e.g. LT00001).\n"
+        "5. Patient name must be in English uppercase (e.g. HENG VANNAT).\n"
+        "6. Gender must be exactly 'Male' or 'Female'.\n"
+        f"7. Test categories must be one of: {categories}\n"
+        f"8. Ignore hospital phone numbers: {hospital_phones}\n"
+        "9. The OCR text may contain garbled Khmer Unicode characters before English labels "
+        "(e.g. 'កម់:/Name' means 'Name'). Extract the English value after the label.\n"
+        "10. If a value cannot be determined from the text, use null.\n"
+        "11. For test results, extract the numeric value or NEGATIVE/POSITIVE exactly as shown.\n"
+        "12. 'BIOCHIMISTRY' is a misspelling of 'BIOCHEMISTRY' — normalize to 'BIOCHEMISTRY'.\n"
+    )
+
+
+def _build_llm_user_prompt(raw_text: str, template: Dict[str, Any]) -> str:
+    """Build the user prompt with raw OCR text and few-shot examples."""
+    examples = template.get('few_shot_examples', [])
+
+    prompt_parts = ["Extract all structured data from this lab report OCR text.\n"]
+
+    if examples:
+        prompt_parts.append("=== FEW-SHOT EXAMPLES ===\n")
+        for i, ex in enumerate(examples[:2], 1):
+            prompt_parts.append(f"--- Example {i} Input ---\n{ex['input']}\n")
+            prompt_parts.append(f"--- Example {i} Output ---\n{json.dumps(ex['output'], ensure_ascii=False)}\n")
+
+    prompt_parts.append("=== ACTUAL LAB REPORT TO EXTRACT ===\n")
+    prompt_parts.append(raw_text)
+
+    return "\n".join(prompt_parts)
+
+
+def _get_ollama_json_schema() -> Dict[str, Any]:
+    """Return the JSON schema for Ollama structured output."""
+    test_result_schema = {
+        "type": "object",
+        "properties": {
+            "testName": {"type": "string"},
+            "result": {"type": "string"},
+            "unit": {"type": ["string", "null"]},
+            "referenceRange": {"type": ["string", "null"]},
+            "flag": {"type": ["string", "null"], "enum": ["H", "L", None]},
+            "category": {"type": "string"}
+        },
+        "required": ["testName", "result", "category"]
+    }
+
+    return {
+        "type": "object",
+        "properties": {
+            "patientInfo": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": ["string", "null"]},
+                    "patientId": {"type": ["string", "null"]},
+                    "age": {"type": ["string", "null"]},
+                    "gender": {"type": ["string", "null"]},
+                    "phone": {"type": ["string", "null"]}
+                },
+                "required": ["name", "patientId", "age", "gender", "phone"]
+            },
+            "labInfo": {
+                "type": "object",
+                "properties": {
+                    "labId": {"type": ["string", "null"]},
+                    "requestedBy": {"type": ["string", "null"]},
+                    "requestedDate": {"type": ["string", "null"]},
+                    "collectedDate": {"type": ["string", "null"]},
+                    "analysisDate": {"type": ["string", "null"]},
+                    "validatedBy": {"type": ["string", "null"]}
+                },
+                "required": ["labId", "requestedBy"]
+            },
+            "testResults": {
+                "type": "array",
+                "items": test_result_schema
+            }
+        },
+        "required": ["patientInfo", "labInfo", "testResults"]
+    }
+
+
+def extract_with_llm(raw_text: str, template: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Send raw OCR text to local Ollama LLM for structured extraction.
+
+    Returns parsed result dict on success, or None on failure (so caller
+    can fall back to regex parser).
+    """
+    try:
+        import requests as http_requests
+    except ImportError:
+        print('DEBUG: requests library not installed, cannot call Ollama', file=sys.stderr)
+        return None
+
+    ollama_config = _get_ollama_config()
+    if not ollama_config['enabled']:
+        print('DEBUG: Ollama LLM disabled in config', file=sys.stderr)
+        return None
+
+    model = template.get('llm_model', ollama_config['model'])
+    api_url = f"{ollama_config['host']}/api/chat"
+
+    system_prompt = _build_llm_system_prompt(template)
+    user_prompt = _build_llm_user_prompt(raw_text, template)
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "format": _get_ollama_json_schema(),
+        "stream": False,
+        "options": {
+            "temperature": 0,
+            "num_ctx": 4096,
+        }
+    }
+
+    try:
+        print(f'DEBUG: Calling Ollama ({model}) at {api_url}...', file=sys.stderr)
+        start = time.time()
+        resp = http_requests.post(
+            api_url,
+            json=payload,
+            timeout=ollama_config['timeout']
+        )
+        elapsed = time.time() - start
+        print(f'DEBUG: Ollama responded in {elapsed:.1f}s (status {resp.status_code})', file=sys.stderr)
+
+        if resp.status_code != 200:
+            print(f'DEBUG: Ollama error: {resp.text[:500]}', file=sys.stderr)
+            return None
+
+        response_data = resp.json()
+        content = response_data.get('message', {}).get('content', '')
+
+        if not content:
+            print('DEBUG: Ollama returned empty content', file=sys.stderr)
+            return None
+
+        # Parse the JSON content from the LLM response
+        result = json.loads(content) if isinstance(content, str) else content
+        print(f'DEBUG: Ollama extracted {len(result.get("testResults", []))} test results', file=sys.stderr)
+        return result
+
+    except http_requests.exceptions.ConnectionError:
+        print('DEBUG: Ollama unreachable (connection refused) — falling back to regex', file=sys.stderr)
+        return None
+    except http_requests.exceptions.Timeout:
+        print(f'DEBUG: Ollama timed out after {ollama_config["timeout"]}s', file=sys.stderr)
+        return None
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        print(f'DEBUG: Failed to parse Ollama response: {e}', file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f'DEBUG: Ollama call failed unexpectedly: {e}', file=sys.stderr)
+        return None
+
+
+def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Post-LLM validation to catch hallucinations and normalize values.
+
+    This is a critical safety net for medical data — never trust raw LLM
+    output without validation.
+    """
+    # Flag normalization — force to enum
+    for test in result.get('testResults', []):
+        flag = test.get('flag')
+        if flag is not None:
+            flag_upper = str(flag).strip().upper()
+            if flag_upper in ('H', 'L'):
+                test['flag'] = flag_upper
+            else:
+                test['flag'] = None
+
+    # Patient ID format validation
+    patient_info = result.get('patientInfo', {})
+    pid = patient_info.get('patientId', '')
+    if pid and not re.match(r'^PT\d+$', str(pid)):
+        patient_info['patientId'] = None
+
+    # Lab ID format validation
+    lab_info = result.get('labInfo', {})
+    lid = lab_info.get('labId', '')
+    if lid and not re.match(r'^LT\d+$', str(lid)):
+        lab_info['labId'] = None
+
+    # Gender normalization
+    gender = patient_info.get('gender', '')
+    if gender:
+        gender_lower = str(gender).strip().lower()
+        if gender_lower in ('male', 'm'):
+            patient_info['gender'] = 'Male'
+        elif gender_lower in ('female', 'f'):
+            patient_info['gender'] = 'Female'
+        else:
+            patient_info['gender'] = None
+
+    # Category normalization
+    for test in result.get('testResults', []):
+        cat = test.get('category', '')
+        if cat:
+            cat_upper = str(cat).upper().strip()
+            cat_upper = cat_upper.replace('BIOCHIMISTRY', 'BIOCHEMISTRY')
+            test['category'] = cat_upper
+
+    # Strip empty string values → null
+    for section in [patient_info, lab_info]:
+        for k, v in section.items():
+            if isinstance(v, str) and not v.strip():
+                section[k] = None
+
+    return result
 
 
 def _infer_mime_type(file_path: str) -> str:
@@ -135,7 +407,6 @@ def _preprocess_image_for_ocr(file_path: str) -> bytes:
         from PIL import Image, ImageFilter, ImageOps
 
         with Image.open(file_path) as image:
-            # Normalize orientation and boost readability for OCR.
             processed = ImageOps.exif_transpose(image)
             processed = processed.convert('L')
             processed = ImageOps.autocontrast(processed, cutoff=2)
@@ -159,21 +430,40 @@ def _preprocess_image_for_ocr(file_path: str) -> bytes:
 
 
 def _flatten_paddle_lines(ocr_result: Any) -> List[Any]:
-    """Normalize paddleocr output shape across versions into a flat line list."""
+    """Normalize paddleocr output shape across versions into a flat line list.
+
+    Handles:
+    - v2.x: list of [box, (text, score)] tuples
+    - v3.5: OCRResult objects with rec_texts / rec_scores attributes
+    - dict: {'rec_texts': [...], 'rec_scores': [...]}
+    """
     if not ocr_result:
         return []
 
+    # v3.5 OCRResult or plain dict with rec_texts / rec_scores
+    rec_texts = None
+    rec_scores = None
     if isinstance(ocr_result, dict):
         rec_texts = ocr_result.get('rec_texts')
         rec_scores = ocr_result.get('rec_scores')
-        if rec_texts and isinstance(rec_texts, list):
-            flattened: List[Any] = []
-            for idx, text in enumerate(rec_texts):
-                score = 0.0
-                if isinstance(rec_scores, list) and idx < len(rec_scores):
-                    score = float(rec_scores[idx])
-                flattened.append((None, (str(text), score)))
-            return flattened
+    elif hasattr(ocr_result, 'rec_texts'):
+        rec_texts = getattr(ocr_result, 'rec_texts', None)
+        rec_scores = getattr(ocr_result, 'rec_scores', None)
+    elif hasattr(ocr_result, '__getitem__') and not isinstance(ocr_result, (list, tuple)):
+        try:
+            rec_texts = ocr_result['rec_texts']
+            rec_scores = ocr_result['rec_scores']
+        except (KeyError, TypeError, IndexError):
+            pass
+
+    if rec_texts and isinstance(rec_texts, list):
+        flattened: List[Any] = []
+        for idx, text in enumerate(rec_texts):
+            score = 0.0
+            if isinstance(rec_scores, list) and idx < len(rec_scores):
+                score = float(rec_scores[idx])
+            flattened.append((None, (str(text), score)))
+        return flattened
 
     if isinstance(ocr_result, list):
         if ocr_result and isinstance(ocr_result[0], list) and ocr_result[0] and isinstance(ocr_result[0][0], (list, tuple)):
@@ -183,8 +473,108 @@ def _flatten_paddle_lines(ocr_result: Any) -> List[Any]:
     return []
 
 
+def _reconstruct_lines_from_polys(ocr_result: Any) -> tuple[str, float]:
+    """Reconstruct reading-order lines from PaddleOCR v3.5 spatial data.
+
+    PaddleOCR v3.5 returns individual text fragments with bounding polygons.
+    This function groups fragments that share the same vertical position
+    (same visual line) and joins them left-to-right to produce properly
+    structured lines for the parser.
+    """
+    import numpy as np
+
+    dt_polys = None
+    rec_texts = None
+    rec_scores = None
+
+    for attr in ['dt_polys', 'rec_texts', 'rec_scores']:
+        val = None
+        if isinstance(ocr_result, dict):
+            val = ocr_result.get(attr)
+        elif hasattr(ocr_result, attr):
+            val = getattr(ocr_result, attr, None)
+        elif hasattr(ocr_result, '__getitem__') and not isinstance(ocr_result, (list, tuple)):
+            try:
+                val = ocr_result[attr]
+            except (KeyError, TypeError, IndexError):
+                pass
+        if attr == 'dt_polys':
+            dt_polys = val
+        elif attr == 'rec_texts':
+            rec_texts = val
+        elif attr == 'rec_scores':
+            rec_scores = val
+
+    if not rec_texts or not dt_polys:
+        return '', 0.0
+
+    if not rec_scores:
+        rec_scores = [0.0] * len(rec_texts)
+
+    fragments = []
+    for text, score, poly in zip(rec_texts, rec_scores, dt_polys):
+        text = str(text).strip()
+        if not text:
+            continue
+        poly_arr = np.array(poly)
+        y_mid = float(poly_arr[:, 1].mean())
+        x_left = float(poly_arr[:, 0].min())
+        fragments.append((y_mid, x_left, text, float(score)))
+
+    if not fragments:
+        return '', 0.0
+
+    fragments.sort(key=lambda f: (f[0], f[1]))
+
+    LINE_Y_TOLERANCE = 15
+    lines = []
+    current_line = [fragments[0]]
+    for frag in fragments[1:]:
+        if abs(frag[0] - current_line[0][0]) < LINE_Y_TOLERANCE:
+            current_line.append(frag)
+        else:
+            current_line.sort(key=lambda f: f[1])
+            lines.append(current_line)
+            current_line = [frag]
+    if current_line:
+        current_line.sort(key=lambda f: f[1])
+        lines.append(current_line)
+
+    text_lines = []
+    all_scores = []
+    for line in lines:
+        joined = '    '.join(f[2] for f in line)
+        text_lines.append(joined)
+        all_scores.extend(f[3] for f in line)
+
+    extracted_text = '\n'.join(text_lines)
+    avg_confidence = sum(all_scores) / len(all_scores) if all_scores else 0.0
+    return extracted_text, avg_confidence
+
+
 def _parse_paddle_result(ocr_result: Any) -> tuple[str, float]:
-    """Parse PaddleOCR result into text and average confidence."""
+    """Parse PaddleOCR result into text and average confidence.
+
+    For v3.5 OCRResult with dt_polys, uses spatial reconstruction.
+    For v2.x list results, falls back to sequential parsing.
+    """
+    has_polys = False
+    if isinstance(ocr_result, dict):
+        has_polys = bool(ocr_result.get('dt_polys'))
+    elif hasattr(ocr_result, 'dt_polys'):
+        has_polys = bool(getattr(ocr_result, 'dt_polys', None))
+    elif hasattr(ocr_result, '__getitem__') and not isinstance(ocr_result, (list, tuple)):
+        try:
+            has_polys = bool(ocr_result['dt_polys'])
+        except (KeyError, TypeError, IndexError):
+            pass
+
+    if has_polys:
+        try:
+            return _reconstruct_lines_from_polys(ocr_result)
+        except Exception as e:
+            print(f'DEBUG: Spatial reconstruction failed ({e}), falling back to sequential parse', file=sys.stderr)
+
     text_lines: List[str] = []
     confidences: List[float] = []
 
@@ -212,21 +602,116 @@ def _parse_paddle_result(ocr_result: Any) -> tuple[str, float]:
     return extracted_text, average_confidence
 
 
+def _call_paddle_ocr(ocr: Any, file_path: str) -> Any:
+    """Call PaddleOCR with API-version compatibility.
+
+    v3.5+: ocr.predict(file_path) -> iterator of OCRResult
+    v2.x:  ocr.ocr(file_path, cls=True) -> list of results
+    """
+    if hasattr(ocr, 'predict'):
+        try:
+            results = list(ocr.predict(file_path))
+            if results:
+                return results[0] 
+        except TypeError:
+            pass
+
+    if hasattr(ocr, 'ocr'):
+        try:
+            return ocr.ocr(file_path, cls=True)
+        except TypeError:
+            return ocr.ocr(file_path)
+
+    raise RuntimeError('PaddleOCR instance has neither predict() nor ocr() method')
+
+
 def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
     """Extract text from document using PaddleOCR with confidence scoring."""
     try:
-        # Pre-load torch (if available) before paddle to avoid Windows DLL conflicts
         try:
-            import torch  # noqa: F401
+            import torch
         except ImportError:
             pass
+        import paddle
         from paddleocr import PaddleOCR
     except ImportError as import_error:
         raise ImportError('paddleocr/paddlepaddle not installed in current environment') from import_error
 
     paddle_config = _get_paddle_config()
     mime_type = _infer_mime_type(file_path)
-    ocr = PaddleOCR(lang=paddle_config['language'])
+
+    requested_device = _select_paddle_device(paddle_config)
+    selected_device = 'cpu'
+    use_gpu = False
+
+    try:
+        if requested_device.startswith('gpu'):
+            compiled_with_cuda = False
+            try:
+                compiled_with_cuda = bool(paddle.is_compiled_with_cuda())
+            except Exception:
+                compiled_with_cuda = False
+
+            device_count = 0
+            try:
+                device_count = int(paddle.device.cuda.device_count())
+            except Exception:
+                device_count = 0
+
+            if compiled_with_cuda and device_count > 0:
+                try:
+                    paddle.set_device(requested_device)
+                    selected_device = requested_device
+                    use_gpu = True
+                except Exception as device_error:
+                    print(
+                        f'DEBUG: Failed to set Paddle device to {requested_device} ({device_error}); falling back to CPU',
+                        file=sys.stderr,
+                    )
+                    paddle.set_device('cpu')
+            else:
+                print(
+                    f'DEBUG: Paddle GPU requested but unavailable '
+                    f'(compiled_with_cuda={compiled_with_cuda}, device_count={device_count}); using CPU',
+                    file=sys.stderr,
+                )
+                paddle.set_device('cpu')
+        else:
+            paddle.set_device('cpu')
+    except Exception as device_setup_error:
+        print(f'DEBUG: Paddle device setup failed ({device_setup_error}); using CPU', file=sys.stderr)
+        try:
+            paddle.set_device('cpu')
+        except Exception:
+            pass
+        selected_device = 'cpu'
+        use_gpu = False
+
+    ocr_kwargs: Dict[str, Any] = {
+        'lang': paddle_config['language'],
+    }
+    try:
+        signature = inspect.signature(PaddleOCR)
+        if 'use_gpu' in signature.parameters:
+            ocr_kwargs['use_gpu'] = use_gpu
+        elif 'use_cuda' in signature.parameters:
+            ocr_kwargs['use_cuda'] = use_gpu
+        elif 'device' in signature.parameters:
+            ocr_kwargs['device'] = selected_device
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        ocr = PaddleOCR(**ocr_kwargs)
+    except TypeError:
+        # Backward/forward compatibility: if PaddleOCR signature changed, fall back to minimal init.
+        ocr = PaddleOCR(lang=paddle_config['language'])
+
+    print(
+        f'DEBUG: PaddleOCR initialized (requested_device={paddle_config.get("device")}, '
+        f'selected_device={selected_device}, use_gpu={use_gpu})',
+        file=sys.stderr,
+    )
 
     if mime_type == 'application/pdf':
         try:
@@ -245,7 +730,7 @@ def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
             pix.save(temp_img_path)
 
             try:
-                result = ocr.ocr(temp_img_path, cls=True)
+                result = _call_paddle_ocr(ocr, temp_img_path)
                 page_text, page_confidence = _parse_paddle_result(result)
                 if page_text:
                     all_text.append(page_text)
@@ -265,7 +750,7 @@ def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
             'page_confidences': page_confidences,
         }
 
-    result = ocr.ocr(file_path, cls=True)
+    result = _call_paddle_ocr(ocr, file_path)
     text, confidence = _parse_paddle_result(result)
     print(f'DEBUG: PaddleOCR extracted {len(text)} characters with confidence {confidence:.3f}', file=sys.stderr)
     return {
@@ -502,7 +987,7 @@ class OptimizedLabReportParser:
             # --- Patient fields: use .*?/Name so garbled Khmer prefix is ignored ---
             'name': re.compile(
                 r'(?:.*?/)Name\s*:?\s*\n?:?\s*([A-Z][A-Za-z\s.]+?)'
-                r'(?=\s*(?:Patient|/Age|\n|$))',
+                r'(?=\s{3,}|\s*(?:Patient|/Age|\n|$))',
                 re.UNICODE | re.MULTILINE
             ),
             'patient_id': re.compile(r'Patient\s*ID\s*:?\s*\n?:?\s*(PT\d+)'),
@@ -558,10 +1043,10 @@ class OptimizedLabReportParser:
                 r'Group|Rhesus))'
                 r'\s*:?\s*'
                 r'(?P<result>\d+\.?\d*|NEGATIVE|POSITIVE|[ABO]{1,2}|○)\s*'
-                r'(?P<flag>[HLhl](?:\s+[HLhl])?)?\s*'
                 r'(?P<unit>(?:mg/dL|U/L|%|\$U/L\$|g/dL|Leu/µL|Ery/pl|'
-                r'x?X?1012/L|10[⁹9]/L|fl|\$10\^\{9\}/L\$|pg|응|%0|0P|09)?)?\s*'
-                r'(?P<reference_range>(?:\(?[^)\n]+\)?|\$\([^)]+\)\$)?)?$',
+                r'x?X?1012/L|10[⁹9]/L|fl|\$10\^{9}/L\$|pg|응|%0|0P|09)?)?\s*'
+                r'(?P<reference_range>(?:\(?[^)\n]+\)?|\$\([^)]+\)\$)?)?\s*'
+                r'(?P<flag>[HLhl1](?:\s+[HLhl1])?)?\s*$',
                 re.MULTILINE | re.IGNORECASE
             )
         }
@@ -787,10 +1272,10 @@ class OptimizedLabReportParser:
                     unit = match.group('unit') if match.group('unit') else None
                     reference_range = match.group('reference_range') if match.group('reference_range') else None
 
-                    # Normalise flag: 'H H' → 'H', Cyrillic 'Н' → 'H'
+                    # Normalise flag: 'H H' → 'H', Cyrillic 'Н' → 'H', OCR '1' → 'H'
                     if flag:
                         flag = flag.strip().split()[0].upper()
-                        if flag in ('Н', 'н'):
+                        if flag in ('Н', 'н', '1'):
                             flag = 'H'
 
                     # If no flag from inline regex, check if there's a flag line nearby
@@ -1118,13 +1603,14 @@ def extract_text_from_pdf_local(pdf_path: str) -> str:
     except Exception as e:
         raise Exception(f'All PDF extraction methods failed. Last error: {str(e)}')
 
-def process_single_file(file_path: str) -> Dict[str, Any]:
+def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     paddle_config = {}
     kiri_config = {}
     ocr_text = None
     confidence = 0.0
     ocr_engine = 'unknown'
     parser = None
+    extraction_method = 'regex'
     
     try:
         mime_type = _infer_mime_type(file_path)
@@ -1132,70 +1618,47 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
         kiri_config = _get_kiri_config()
         
         if mime_type in {'application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp'}:
-            # ── Fusion mode: both Paddle + Kiri enabled ──
+            # ── Dual-engine mode: Paddle primary, Kiri fallback ──
             if paddle_config['enabled'] and kiri_config['enabled']:
-                # Pre-load torch before paddle to avoid Windows DLL conflicts (shm.dll)
-                try:
-                    import torch  # noqa: F401
-                except ImportError:
-                    pass
-                paddle_text = None
-                paddle_conf = 0.0
-                kiri_text = None
-                kiri_conf = 0.0
-                kiri_results = []
-
-                # Run PaddleOCR
+                # PaddleOCR is primary — best for structured English/numeric lab data
                 try:
                     paddle_result = process_with_paddle_ocr(file_path)
-                    paddle_text = paddle_result['text']
-                    paddle_conf = paddle_result['confidence']
-                    print(f'DEBUG: PaddleOCR pass complete — {len(paddle_text)} chars, confidence {paddle_conf:.3f}', file=sys.stderr)
+                    ocr_text = paddle_result['text']
+                    confidence = paddle_result['confidence']
+                    ocr_engine = 'paddle (primary)'
+                    print(f'DEBUG: PaddleOCR primary pass — {len(ocr_text)} chars, confidence {confidence:.3f}', file=sys.stderr)
                 except Exception as paddle_error:
-                    print(f'DEBUG: PaddleOCR failed ({paddle_error}), will use Kiri-only mode', file=sys.stderr)
+                    print(f'DEBUG: PaddleOCR failed ({paddle_error}), trying Kiri OCR fallback', file=sys.stderr)
 
-                # Run Kiri OCR
-                try:
-                    kiri_result = process_with_kiri_ocr(file_path)
-                    kiri_text = kiri_result['text']
-                    kiri_conf = kiri_result['confidence']
-                    kiri_results = kiri_result.get('results', [])
-                    print(f'DEBUG: Kiri OCR pass complete — {len(kiri_text)} chars, confidence {kiri_conf:.3f}', file=sys.stderr)
-                except Exception as kiri_error:
-                    print(f'DEBUG: Kiri OCR failed ({kiri_error}), will use Paddle-only mode', file=sys.stderr)
-
-                # Fuse results if both succeeded
-                if paddle_text and kiri_text:
-                    fused = _fuse_ocr_texts(paddle_text, paddle_conf, kiri_text, kiri_conf, kiri_results)
-                    ocr_text = fused['text']
-                    confidence = fused['confidence']
-                    ocr_engine = f'paddle+kiri (fused: {fused["paddle_line_count"]}P/{fused["kiri_line_count"]}K)'
-                elif kiri_text:
-                    ocr_text = kiri_text
-                    confidence = kiri_conf
-                    ocr_engine = 'kiri (paddle unavailable)'
-                elif paddle_text:
-                    ocr_text = paddle_text
-                    confidence = paddle_conf
-                    ocr_engine = 'paddle (kiri unavailable)'
-                else:
-                    # Both local engines failed — fall back to Google
-                    print(f'DEBUG: Both local engines failed, falling back to Google Document AI', file=sys.stderr)
+                    # KiriOCR fallback — Khmer-specialized transformer
                     try:
-                        ocr_text = process_with_google_document_ai(file_path)
-                        ocr_engine = 'google (fallback from local engines)'
-                    except Exception as google_error:
-                        raise Exception(f'All OCR engines failed. Paddle, Kiri, and Google all unavailable. Last error: {google_error}')
+                        kiri_result = process_with_kiri_ocr(file_path)
+                        ocr_text = kiri_result['text']
+                        confidence = kiri_result['confidence']
+                        ocr_engine = 'kiri (fallback from paddle)'
+                        print(f'DEBUG: Kiri OCR fallback — {len(ocr_text)} chars, confidence {confidence:.3f}', file=sys.stderr)
+                    except Exception as kiri_error:
+                        print(f'DEBUG: Kiri OCR also failed ({kiri_error}), trying Google', file=sys.stderr)
 
-                # If fused confidence is still low, optionally try Google
-                if confidence < min(paddle_config['confidence_threshold'], kiri_config['confidence_threshold']):
-                    print(f'DEBUG: Fused confidence {confidence:.3f} below threshold, trying Google fallback', file=sys.stderr)
+                        # Google last resort
+                        try:
+                            ocr_text = process_with_google_document_ai(file_path)
+                            ocr_engine = 'google (fallback from local engines)'
+                        except Exception as google_error:
+                            raise Exception(
+                                f'All OCR engines failed. Paddle: {paddle_error}, '
+                                f'Kiri: {kiri_error}, Google: {google_error}'
+                            )
+
+                # If PaddleOCR confidence is below threshold, try Google as enhancement
+                if confidence < paddle_config['confidence_threshold'] and ocr_engine.startswith('paddle'):
+                    print(f'DEBUG: PaddleOCR confidence {confidence:.3f} below {paddle_config["confidence_threshold"]}, trying Google', file=sys.stderr)
                     try:
                         google_text = process_with_google_document_ai(file_path)
                         ocr_text = google_text
-                        ocr_engine = f'google (fallback from {ocr_engine})'
+                        ocr_engine = f'google (fallback from paddle low-confidence)'
                     except Exception as google_fallback_error:
-                        print(f'DEBUG: Google fallback unavailable ({google_fallback_error}); keeping fused output', file=sys.stderr)
+                        print(f'DEBUG: Google fallback unavailable ({google_fallback_error}); keeping PaddleOCR output', file=sys.stderr)
 
             # ── Paddle-only mode ──
             elif paddle_config['enabled']:
@@ -1248,11 +1711,26 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
                 ocr_text = f.read()
             ocr_engine = 'text'
 
-        parser = OptimizedLabReportParser()
-        result = parser.parse_optimized(ocr_text)
+        # ── Intelligence Layer: LLM-first, regex-fallback ──
+        result = None
+        if template:
+            llm_result = extract_with_llm(ocr_text, template)
+            if llm_result:
+                result = validate_extraction(llm_result)
+                extraction_method = 'llm'
+                print(f'DEBUG: LLM extraction succeeded — {len(result.get("testResults", []))} tests', file=sys.stderr)
+
+        # Fallback to regex parser if LLM failed or no template
+        if result is None:
+            parser = OptimizedLabReportParser()
+            result = parser.parse_optimized(ocr_text)
+            extraction_method = 'regex'
+            print(f'DEBUG: Using regex parser (fallback)', file=sys.stderr)
+
         result['source_file'] = os.path.basename(file_path)
         result['success'] = True
         result['ocr_engine'] = ocr_engine
+        result['extraction_method'] = extraction_method
         result['rawText'] = ocr_text
         result['confidence'] = confidence
         return result
@@ -1263,25 +1741,30 @@ def process_single_file(file_path: str) -> Dict[str, Any]:
             'success': False,
             'rawText': ocr_text,
             'ocr_engine': ocr_engine,
+            'extraction_method': extraction_method,
             'debug': {
                 'ocr_length': len(ocr_text) if ocr_text else 0,
                 'failed_patterns': getattr(parser, 'failed_patterns', []) if parser else []
             }
         }
 
-def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
-    if max_workers is None:
+def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = None, template: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    # When using LLM, serialize to avoid GPU contention
+    if template and max_workers is None:
+        max_workers = 1
+    elif max_workers is None:
         max_workers = min(len(file_paths), 3)
-    print(f'DEBUG: Processing {len(file_paths)} files with {max_workers} workers (PaddleOCR + Google fallback)', file=sys.stderr)
+    engine_desc = 'LLM + PaddleOCR' if template else 'PaddleOCR + Google fallback'
+    print(f'DEBUG: Processing {len(file_paths)} files with {max_workers} workers ({engine_desc})', file=sys.stderr)
     start_time = time.time()
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_file = {executor.submit(process_single_file, file_path): file_path for file_path in file_paths}
+        future_to_file = {executor.submit(process_single_file, fp, template): fp for fp in file_paths}
         for future in concurrent.futures.as_completed(future_to_file):
             try:
                 result = future.result()
                 results.append(result)
-                print(f'DEBUG: Completed {result.get("source_file", "unknown")}', file=sys.stderr)
+                print(f'DEBUG: Completed {result.get("source_file", "unknown")} via {result.get("extraction_method", "unknown")}', file=sys.stderr)
             except Exception as e:
                 file_path = future_to_file[future]
                 results.append({
@@ -1294,38 +1777,45 @@ def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = N
     return results
 
 def main():
-    parser = argparse.ArgumentParser(description='Parse lab report OCR text with PaddleOCR + Google Document AI fallback')
+    parser = argparse.ArgumentParser(description='Smart OCR Intelligence Layer — PaddleOCR + Ollama LLM')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--file', help='Single file to process')
     group.add_argument('--batch', help='Directory containing OCR files')
     group.add_argument('--file-list', help='Text file containing list of files to process')
     parser.add_argument('--output-format', choices=['json', 'pretty'], default='json')
-    parser.add_argument('--workers', type=int, default=3, help='Number of parallel workers (max 3 for API limits)')
+    parser.add_argument('--workers', type=int, default=None, help='Parallel workers (default: 1 for LLM, 3 for regex)')
     parser.add_argument('--output-file', help='Output file (default: stdout)')
+    parser.add_argument('--template', help='Path to JSON file with report template for LLM extraction')
     args = parser.parse_args()
+
+    # Load template if provided
+    template = None
+    if args.template:
+        try:
+            with open(args.template, 'r', encoding='utf-8') as tf:
+                template = json.load(tf)
+            print(f'DEBUG: Loaded report template: {template.get("name", "unknown")}', file=sys.stderr)
+        except Exception as e:
+            print(f'DEBUG: Failed to load template ({e}), proceeding without LLM', file=sys.stderr)
+
     results = []
     try:
         if args.file:
-            result = process_single_file(args.file)
+            result = process_single_file(args.file, template)
             results = [result]
         elif args.batch:
             batch_dir = Path(args.batch)
             file_paths = []
-            file_paths.extend([str(f) for f in batch_dir.glob('*.pdf')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.jpg')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.jpeg')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.png')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.tif')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.tiff')])
-            file_paths.extend([str(f) for f in batch_dir.glob('*.txt')])
+            for ext in ['*.pdf', '*.jpg', '*.jpeg', '*.png', '*.tif', '*.tiff', '*.txt']:
+                file_paths.extend([str(f) for f in batch_dir.glob(ext)])
             print(f'DEBUG: Found {len(file_paths)} files to process', file=sys.stderr)
             if not file_paths:
                 raise Exception(f'No supported files (PDF/Image/TXT) found in {batch_dir}')
-            results = process_batch_parallel(file_paths, args.workers)
+            results = process_batch_parallel(file_paths, args.workers, template)
         elif args.file_list:
             with open(args.file_list, 'r') as f:
                 file_paths = [line.strip() for line in f if line.strip()]
-            results = process_batch_parallel(file_paths, args.workers)
+            results = process_batch_parallel(file_paths, args.workers, template)
         if args.output_format == 'json':
             output = json.dumps(results, ensure_ascii=False)
         else:
@@ -1342,3 +1832,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

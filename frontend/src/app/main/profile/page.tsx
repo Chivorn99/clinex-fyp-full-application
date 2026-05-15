@@ -15,12 +15,12 @@ export default function ProfilePage() {
     const [loading, setLoading] = useState(true)
 
     const [userData, setUserData] = useState({
-        name: 'Dr. Sarah Johnson',
-        email: 'sarah@smithclinic.com',
-        phone: '+1 (555) 123-4567',
-        specialization: 'General Practitioner',
-        role: 'Lab Technician',
-        joinDate: '2023-01-15',
+        name: '',
+        email: '',
+        phone: '',
+        specialization: '',
+        role: '',
+        joinDate: '',
         profileImage: '/api/placeholder/150/150'
     })
 
@@ -33,22 +33,22 @@ export default function ProfilePage() {
                     const user = response.data.user
 
                     setUserData({
-                        name: user.name || 'Dr. Sarah Johnson',
-                        email: user.email || 'sarah@smithclinic.com',
-                        phone: user.phone_number || '+1 (555) 123-4567',
-                        specialization: user.specialization || 'General Practitioner',
-                        role: user.role || 'Lab Technician',
-                        joinDate: user.created_at || '2023-01-15',
+                        name: user.name || '',
+                        email: user.email || '',
+                        phone: user.phone_number || '',
+                        specialization: user.specialization || '',
+                        role: user.role || '',
+                        joinDate: user.created_at || '',
                         profileImage: response.data.profile_picture_url || '/api/placeholder/150/150'
                     })
                 } else {
                     setUserData({
-                        name: authUser?.name || 'Dr. Sarah Johnson',
-                        email: authUser?.email || 'sarah@smithclinic.com',
-                        phone: authUser?.phone_number || '+1 (555) 123-4567',
-                        specialization: authUser?.specialization || 'General Practitioner',
-                        role: authUser?.role || 'Lab Technician',
-                        joinDate: authUser?.created_at || '2023-01-15',
+                        name: authUser?.name || '',
+                        email: authUser?.email || '',
+                        phone: authUser?.phone_number || '',
+                        specialization: authUser?.specialization || '',
+                        role: authUser?.role || '',
+                        joinDate: authUser?.created_at || '',
                         profileImage: authUser?.profile_picture_url || '/api/placeholder/150/150'
                     })
                 }
@@ -321,11 +321,11 @@ export default function ProfilePage() {
                                         </label>
                                         <input
                                             type="text"
-                                            value={userData.role}
-                                            onChange={(e) => setUserData({ ...userData, role: e.target.value })}
-                                            disabled={!isEditing}
-                                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                                            value={userData.role?.replace('_', ' ') || ''}
+                                            disabled={true}
+                                            className="block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500 capitalize"
                                         />
+                                        <p className="text-xs text-gray-400 mt-1">Role can only be changed by an administrator</p>
                                     </div>
 
                                     <div>

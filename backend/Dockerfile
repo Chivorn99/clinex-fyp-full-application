@@ -1,4 +1,11 @@
-FROM php:8.2-cli
+FROM php:8.2-cli-bookworm
+
+# PaddlePaddle variant selection:
+# - cpu (default): installs paddlepaddle from PyPI via requirements.txt
+# - gpu: swaps paddlepaddle -> paddlepaddle-gpu from Paddle's CUDA wheel index
+ARG PADDLE_VARIANT=cpu
+ARG PADDLE_GPU_VERSION=3.3.0
+ARG PADDLE_GPU_INDEX_URL=https://www.paddlepaddle.org.cn/packages/stable/cu126/
 
 WORKDIR /var/www/html
 
@@ -41,6 +48,14 @@ RUN pip3 install --no-cache-dir --break-system-packages \
 # Stage 2: Install remaining OCR dependencies (kiri-ocr will reuse the CPU torch).
 RUN pip3 install --no-cache-dir --break-system-packages \
         -r /tmp/requirements.txt || true
+
+# Optional: build a GPU-enabled image when you have NVIDIA runtime available.
+# This keeps the default image CPU-friendly for teammates.
+RUN if [ "$PADDLE_VARIANT" = "gpu" ]; then \
+        pip3 uninstall -y paddlepaddle || true; \
+        pip3 install --no-cache-dir --break-system-packages \
+            "paddlepaddle-gpu==${PADDLE_GPU_VERSION}" -i "${PADDLE_GPU_INDEX_URL}"; \
+    fi
 
 COPY . .
 

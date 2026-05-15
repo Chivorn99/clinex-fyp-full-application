@@ -1,15 +1,15 @@
-erine i20
-sina 625
+werings Feat
+mas
+saj 125
 KV Hospital
-Qe
 K+
-àŝaj shopmuziei nɲmåj:winüzikpo shijm:qñünüiná vajunnnnnkninu
-bniswiu:qui:máquumïñ shquñsans :[n:im:i)s imwņsminümü äíîñ¤áƒš
-iņu žājs ķu µ mw ¦ājs ñ fins šumstrunu.ƒ‚Âƒ³º¶
+ñšaj šunɲmist npmůdy:wimuziñpo shijm:qñonviná vůjungınınnkonu
+bniswu:qui:máquumïñ êquñsang :[n:im:) imwņsminümü äíîñ¤áƒš
+iņináciu nájs ķu µmw äñjs is instru
 HOSPITAL
 min:/Name
 : HENG VANNAT
-ni/Age
+inti/Age
 : 35 Y, 1 D
 In 9/Gender
 : Male
@@ -28,77 +28,69 @@ Analysis Date
 Requested By
 : Dr. Neak Bunteum
 LABORATORY REPORT
-BIOCHIMISTRY
+HEMATOLOGY
 Results
 Unit
 Reference Range
 Flag
-Creatinine,
-serum
-: 0.8
-mg/dL
-(0.9 1.1)
-L
-Urea/BUN
+CBC
+WBC
 :
-31
-mg/dL
-(6.0 40.0 )
-Glucose
+7.6
+10⁹/L
+(3.5-10.0)
+LYM%
 :
-130
-mg/dL
-(75-115)
-H H
-Cholesterole Total
-: 281
-mg/dL
-(0 - 200)
-Cholesterol-HDL
+38.0
+OP
+(15.0-50.0)
+MONO%
 :
-65
-mg/dL
-(>60)
-Cholesterol-LDL
-: 165
-mg/dL
-(0 - 150)
-Н
-H H
-Tryglyceride
+6.3
+09
+(2.0-15.0)
+NUE%
 :
-494
-mg/dL
-(0 - 150)
-Uric acide
-: 5.5
-mg/dL
-(3.5 - 6.0)
-ENZYMOLOGY
-Results
-Unit
-Reference Range
-Flag
-GGT (Gamm Glutamyl Transferas): 269
-U/L
-(0 - 55 )
-H
-IT!
-TRANSAMINASE
-SGPT/ALT
-126
-U/L
-(0 - 41)
-H H
-SGOT/AST
-56
-U/L
-(0 - 40)
+55.7
+%0
+(35.0-80.0)
+EOSINO%
+:
+15.5
+응
+(11.5-16.5)
+BASO%
+: 29.3
+09
+25.0-35.0)
+HGB
+:
+36.5
+g/dL
+(31.0-38.0)
+MCH
+:
+5.30
+pg
+(3.50-5.50)
+MCHC
+:
+80.2
+g/dL
+(75.0-100.0)
+RBC
+: 42.5
+x1012/L
+(35.0-55.0)
+MCV
+: 335
+fl
+(150-400)
 Validated By:
 Lab Technician:
 b
 the
 2024-03-11 09:12
 2024-03-11 09:12
-mawgs: qûqniumi wijdinēšu vynnjaw tannjaw (oywňanskunjom 5 ñ.8)
-î₪açıšņ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
+mawgs: qûqnfumi wjšinēšu vynnjaw tannjaw (oywňanskunjom 5 ñ.8)
+i₪açıšņ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70

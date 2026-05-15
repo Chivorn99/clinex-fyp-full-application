@@ -43,13 +43,10 @@ class UserManagementController extends Controller
     public function updateRole(Request $request, $id)
     {
         $user = User::findOrFail($id);
-
-        // Validate the incoming request
         $validated = $request->validate([
             'role' => 'required|in:admin,user,lab_technician',
         ]);
 
-        // Update user role
         $user->update(['role' => $validated['role']]);
 
         return redirect()->route('users.index')->with('success', "User {$user->name}'s role updated to {$validated['role']}");
@@ -63,7 +60,6 @@ class UserManagementController extends Controller
      */
     public function destroy($id)
     {
-        // Check if this is the current user
         if ((int) $id === request()->user()->getKey()) {
             return back()->with('error', 'You cannot delete your own account.');
         }
@@ -71,7 +67,6 @@ class UserManagementController extends Controller
         $user = User::findOrFail($id);
         $userName = $user->name;
 
-        // Delete user
         $user->delete();
 
         return redirect()->route('users.index')->with('success', "User {$userName} has been deleted successfully.");
