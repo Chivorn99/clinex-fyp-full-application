@@ -121,6 +121,19 @@ services:
       sh -lc "npm install
       && npm run dev -- --hostname 0.0.0.0 --port 3000"
 
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: clinex-phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+    ports:
+      - "8080:80"
+
 volumes:
   mysql_data:
   backend_vendor:

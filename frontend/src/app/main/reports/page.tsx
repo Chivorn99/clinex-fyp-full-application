@@ -247,11 +247,6 @@ export default function ReportsPage() {
         }
     }
 
-    }
-
-
-
-
 
     const stats = {
         total: reports.length,
@@ -388,86 +383,83 @@ export default function ReportsPage() {
                     </div>
 
                     {/* Search and Filter Bar */}
-                    {activeTab !== 'batches' && (
-                        <div className="p-6 border-b border-gray-200">
-                            <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-                                <div className="flex flex-1 space-x-4">
-                                    <div className="relative flex-1 max-w-md">
-                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                            <Search className="h-5 w-5 text-gray-400" />
-                                        </div>
-                                        <input
-                                            type="text"
-                                            placeholder="Search reports..."
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                                        />
+                    <div className="p-6 border-b border-gray-200">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
+                            <div className="flex flex-1 space-x-4">
+                                <div className="relative flex-1 max-w-md">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Search className="h-5 w-5 text-gray-400" />
                                     </div>
-                                    <select
-                                        value={filterBatch}
-                                        onChange={(e) => setFilterBatch(e.target.value)}
-                                        className="block px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-800"
-                                    >
-                                        <option value="all">All Batches</option>
-                                        {availableBatches.map((batch) => (
-                                            <option key={batch.id} value={batch.id}>
-                                                {batch.name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <input
+                                        type="text"
+                                        placeholder="Search reports..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                    />
                                 </div>
+                                <select
+                                    value={filterBatch}
+                                    onChange={(e) => setFilterBatch(e.target.value)}
+                                    className="block px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-800"
+                                >
+                                    <option value="all">All Batches</option>
+                                    {availableBatches.map((batch) => (
+                                        <option key={batch.id} value={batch.id}>
+                                            {batch.name}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
-                    )}
+                    </div>
 
                     {/* Reports Table */}
-                    {activeTab !== 'batches' ? (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Report Details
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Patient
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Type
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Status
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Processed Date
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Actions
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {loading ? (
-                                        Array.from({ length: 5 }).map((_, i) => (
-                                            <tr key={i} className="animate-pulse">
-                                                <td className="px-6 py-4"><div className="flex items-center"><div className="h-5 w-5 bg-gray-200 rounded mr-3" /><div><div className="h-4 bg-gray-200 rounded w-40 mb-1" /><div className="h-3 bg-gray-200 rounded w-24" /></div></div></td>
-                                                <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-28" /></td>
-                                                <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-20" /></td>
-                                                <td className="px-6 py-4"><div className="h-5 bg-gray-200 rounded-full w-16" /></td>
-                                                <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-24" /></td>
-                                                <td className="px-6 py-4"><div className="h-8 bg-gray-200 rounded w-16" /></td>
-                                            </tr>
-                                        ))
-                                    ) : filteredReports.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={6} className="px-6 py-12 text-center">
-                                                <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                                                <h3 className="text-lg font-medium text-gray-900 mb-1">No Reports Found</h3>
-                                                <p className="text-sm text-gray-500">Try adjusting your filters or search query.</p>
-                                            </td>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Report Details
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Patient
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Type
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Status
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Processed Date
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {loading ? (
+                                    Array.from({ length: 5 }).map((_, i) => (
+                                        <tr key={i} className="animate-pulse">
+                                            <td className="px-6 py-4"><div className="flex items-center"><div className="h-5 w-5 bg-gray-200 rounded mr-3" /><div><div className="h-4 bg-gray-200 rounded w-40 mb-1" /><div className="h-3 bg-gray-200 rounded w-24" /></div></div></td>
+                                            <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-28" /></td>
+                                            <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-20" /></td>
+                                            <td className="px-6 py-4"><div className="h-5 bg-gray-200 rounded-full w-16" /></td>
+                                            <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-24" /></td>
+                                            <td className="px-6 py-4"><div className="h-8 bg-gray-200 rounded w-16" /></td>
                                         </tr>
-                                    ) : (
+                                    ))
+                                ) : filteredReports.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="px-6 py-12 text-center">
+                                            <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                                            <h3 className="text-lg font-medium text-gray-900 mb-1">No Reports Found</h3>
+                                            <p className="text-sm text-gray-500">Try adjusting your filters or search query.</p>
+                                        </td>
+                                    </tr>
+                                ) : (
                                     filteredReports.map((report) => (
                                         <tr
                                             key={report.id}
@@ -526,11 +518,11 @@ export default function ReportsPage() {
                                                 </div>
                                             </td>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </DashboardLayout>

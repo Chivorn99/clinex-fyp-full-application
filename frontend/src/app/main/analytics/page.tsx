@@ -40,7 +40,6 @@ interface AnalyticsData {
         verifiedReports: number
         pendingReports: number
         failedReports: number
-        averageProcessingTime: number
     }
     trends: {
         daily: Array<{
@@ -249,7 +248,6 @@ export default function AnalyticsPage() {
                     verifiedReports,
                     pendingReports,
                     failedReports,
-                    averageProcessingTime
                 },
                 trends: {
                     daily,
