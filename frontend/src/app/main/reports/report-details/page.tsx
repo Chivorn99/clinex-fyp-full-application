@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { ArrowLeft, FileText, User, Calendar, Clock, Phone, CheckCircle, AlertTriangle, Download, Maximize, Minimize, FileDown } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { apiClient } from '@/lib/api'
 
 interface ApiError {
@@ -68,6 +69,7 @@ export default function ReportDetailsPage() {
     const searchParams = useSearchParams()
     const reportId = searchParams.get('id')
     const { user } = useAuth()
+    const toast = useToast()
 
     const [reportData, setReportData] = useState<ReportData | null>(null)
     const [reportMetadata, setReportMetadata] = useState<ReportMetadata | null>(null)
@@ -78,20 +80,7 @@ export default function ReportDetailsPage() {
     const [pdfDataUrl, setPdfDataUrl] = useState<string>('')
     const [pdfLoading, setPdfLoading] = useState(true)
     const [pdfError, setPdfError] = useState<string>('')
-
-    // Mock user data
-    const mockUser = {
-        name: 'Dr. Sarah Johnson',
-        email: 'sarah@smithclinic.com',
-        clinic: 'Smith Medical Clinic'
-    }
-
-    // Use auth user if available, otherwise fallback to mock
-    const currentUser = user ? {
-        name: user.name,
-        email: user.email,
-        clinic: 'Smith Medical Clinic'
-    } : mockUser
+    const [fileContentType, setFileContentType] = useState<string>('')
 
     useEffect(() => {
         if (reportId) {
@@ -107,7 +96,6 @@ export default function ReportDetailsPage() {
 
             console.log('🚀 Fetching report details for ID:', reportId)
             const response = await apiClient.get(`/lab-reports/${reportId}`)
-            console.log('✅ API Response:', response)
 
             if (response.success && response.data?.lab_report) {
                 const labReport = response.data.lab_report
@@ -149,12 +137,6 @@ export default function ReportDetailsPage() {
 
                 setReportData(transformedReportData)
                 setReportMetadata(transformedMetadata)
-
-                console.log('✅ Data transformed successfully:', {
-                    patientName: transformedReportData.patientInfo.name,
-                    labId: transformedReportData.labInfo.labId,
-                    testResultsCount: transformedReportData.testResults.length
-                })
             } else {
                 throw new Error('Invalid response structure')
             }
@@ -183,25 +165,23 @@ export default function ReportDetailsPage() {
             setPdfLoading(true)
             setPdfError('')
 
-            console.log('🚀 Fetching PDF data for report ID:', reportId)
             const response = await apiClient.get(`/${reportId}/pdf-data`)
-            console.log('✅ PDF API Response:', response)
 
             if (response.success && response.data?.base64_content) {
                 const base64 = response.data.base64_content
-                const dataUrl = `data:application/pdf;base64,${base64}`
+                const contentType = response.data.content_type || 'application/pdf'
+                setFileContentType(contentType)
+                const dataUrl = `data:${contentType};base64,${base64}`
                 setPdfDataUrl(dataUrl)
             } else {
-                throw new Error('Invalid PDF response structure')
+                throw new Error('Invalid response structure')
             }
         } catch (err: unknown) {
-            console.error('💥 Failed to fetch PDF data:', err)
-            let errorMessage = 'Failed to load PDF preview'
+            console.error('Failed to fetch document:', err)
+            let errorMessage = 'Failed to load document preview'
 
             if (isApiError(err) && err.status === 404) {
-                errorMessage = 'PDF file not found'
-            } else if (isApiError(err) && err.status === 401) {
-                errorMessage = 'Authentication failed. Please log in again.'
+                errorMessage = 'Document file not found'
             } else if (isApiError(err) && err.message) {
                 errorMessage = err.message
             }
@@ -254,7 +234,6 @@ export default function ReportDetailsPage() {
             link.click()
             document.body.removeChild(link)
             window.URL.revokeObjectURL(url)
-            console.log('✅ CSV export successful')
         } catch (error: unknown) {
             console.error('❌ CSV export failed:', error)
             let errorMessage = 'Failed to export CSV. Please try again.'
@@ -263,7 +242,7 @@ export default function ReportDetailsPage() {
             } else if (isApiError(error) && error.message) {
                 errorMessage = error.message
             }
-            alert(errorMessage)
+            toast.error(errorMessage)
         } finally {
             setIsExportingCsv(false)
         }
@@ -401,27 +380,25 @@ export default function ReportDetailsPage() {
                                 Verify Report
                             </button>
                         )}
-                        {(reportMetadata.status === 'verified' || currentUser.name.includes('Dr.')) && (
+                        {reportMetadata.status === 'verified' && (
                             <>
-                                {reportMetadata.status === 'verified' && (
-                                    <button
-                                        onClick={handleExportCsv}
-                                        disabled={isExportingCsv}
-                                        className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {isExportingCsv ? (
-                                            <>
-                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                                Exporting...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <FileDown className="h-4 w-4 mr-2" />
-                                                Export CSV
-                                            </>
-                                        )}
-                                    </button>
-                                )}
+                                <button
+                                    onClick={handleExportCsv}
+                                    disabled={isExportingCsv}
+                                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isExportingCsv ? (
+                                        <>
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                            Exporting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FileDown className="h-4 w-4 mr-2" />
+                                            Export CSV
+                                        </>
+                                    )}
+                                </button>
                             </>
                         )}
                         <button
@@ -534,11 +511,19 @@ export default function ReportDetailsPage() {
                                     </div>
                                 ) : (
                                     <div className="border rounded-lg overflow-hidden" style={{ height: isPreviewExpanded ? '90vh' : '600px' }}>
-                                        <iframe
-                                            src={pdfDataUrl}
-                                            className="w-full h-full"
-                                            title="PDF Preview"
-                                        />
+                                        {fileContentType.startsWith('image/') ? (
+                                            <img
+                                                src={pdfDataUrl}
+                                                alt="Lab Report Preview"
+                                                className="w-full h-full object-contain bg-gray-50"
+                                            />
+                                        ) : (
+                                            <iframe
+                                                src={pdfDataUrl}
+                                                className="w-full h-full"
+                                                title="PDF Preview"
+                                            />
+                                        )}
                                     </div>
                                 )}
                                 {isPreviewExpanded && (

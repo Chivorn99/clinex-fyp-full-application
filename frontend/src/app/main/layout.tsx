@@ -1,4 +1,6 @@
+'use client'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import { ToastProvider } from '@/contexts/ToastContext'
 
 export default function MainLayout({
   children,
@@ -7,7 +9,9 @@ export default function MainLayout({
 }) {
   return (
     <ProtectedRoute>
-      {children}
+      <ToastProvider>
+        {children}
+      </ToastProvider>
     </ProtectedRoute>
   )
-}
+}

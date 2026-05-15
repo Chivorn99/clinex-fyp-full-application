@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import {User,Phone,Calendar,FileText,Search,Filter,Eye,ChevronRight,Users,Activity,Clock,UserCheck,Download,RefreshCw,AlertCircle,CheckCircle,XCircle} from 'lucide-react'
+import {User,Phone,Calendar,FileText,Search,Filter,Eye,ChevronRight,Users,Activity,Clock,UserCheck,RefreshCw,AlertCircle} from 'lucide-react'
 import { apiClient } from '@/lib/api'
 
 // Interfaces
@@ -31,44 +31,6 @@ interface PaginationData {
     prev_page_url: string | null
 }
 
-interface PatientLabReport {
-    id: number
-    original_filename: string
-    status: string
-    verified_at: string | null
-    processed_at: string | null
-    notes: string | null
-    extracted_data: Array<{
-        id: number
-        category: string
-        test_name: string
-        result: string
-        unit: string
-        reference: string
-        flag: string | null
-    }>
-    batch: {
-        id: number
-        name: string
-        status: string
-    }
-    uploader: {
-        id: number
-        name: string
-        email: string
-    }
-    verifier: {
-        id: number
-        name: string
-    } | null
-    extracted_lab_info: {
-        lab_id: string
-        requested_by: string
-        collected_date: string
-        analysis_date: string
-    } | null
-}
-
 interface ApiError {
     response?: {
         data?: {
@@ -78,7 +40,7 @@ interface ApiError {
 }
 
 const isApiError = (err: unknown): err is ApiError => typeof err === 'object' && err !== null
-type ExtractedTest = PatientLabReport['extracted_data'][number]
+
 export default function PatientPage() {
     const router = useRouter()
 
@@ -91,12 +53,7 @@ export default function PatientPage() {
     const [currentPage, setCurrentPage] = useState(1)
     const [pagination, setPagination] = useState<PaginationData | null>(null)
 
-    // Patient details modal state
-    const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
-    const [patientReports, setPatientReports] = useState<PatientLabReport[]>([])
-    const [loadingReports, setLoadingReports] = useState(false)
-    const [showPatientModal, setShowPatientModal] = useState(false)
-    const [reportsPagination, setReportsPagination] = useState<PaginationData | null>(null)
+
 
     const fetchPatients = useCallback(async () => {
         try {
@@ -156,57 +113,12 @@ export default function PatientPage() {
         fetchPatients()
     }, [fetchPatients])
 
-    const fetchPatientReports = useCallback(async (patientId: number, page: number = 1) => {
-        try {
-            setLoadingReports(true)
-
-            console.log('🚀 Fetching reports for patient:', patientId)
-
-            const response = await apiClient.get(`/patients/${patientId}/lab-reports?page=${page}&per_page=10`)
-            console.log('✅ Patient reports API Response:', response)
-
-            if (response.success && response.data) {
-                setPatientReports(response.data.data || [])
-                setReportsPagination({
-                    current_page: response.data.current_page,
-                    last_page: response.data.last_page,
-                    per_page: response.data.per_page,
-                    total: response.data.total,
-                    from: response.data.from,
-                    to: response.data.to,
-                    next_page_url: response.data.next_page_url,
-                    prev_page_url: response.data.prev_page_url
-                })
-
-                console.log(`✅ Loaded ${response.data.data?.length || 0} reports for patient ${patientId}`)
-            } else {
-                throw new Error('Invalid response structure')
-            }
-
-        } catch (err: unknown) {
-            console.error('💥 Failed to fetch patient reports:', err)
-            // Don't show error for no reports, just show empty state
-            setPatientReports([])
-            setReportsPagination(null)
-        } finally {
-            setLoadingReports(false)
-        }
-    }, [])
-
-    const handlePatientClick = async (patient: Patient) => {
-        setSelectedPatient(patient)
-        setShowPatientModal(true)
-        await fetchPatientReports(patient.id, 1)
+    const handlePatientClick = (patient: Patient) => {
+        router.push(`/main/patient/${patient.id}`)
     }
 
     const handlePageChange = (page: number) => {
         setCurrentPage(page)
-    }
-
-    const handleReportsPageChange = async (page: number) => {
-        if (selectedPatient) {
-            await fetchPatientReports(selectedPatient.id, page)
-        }
     }
 
     const handleSearch = (e: React.FormEvent) => {
@@ -231,47 +143,7 @@ export default function PatientPage() {
         })
     }
 
-    const getStatusIcon = (status: string) => {
-        switch (status) {
-            case 'verified':
-                return <CheckCircle className="h-4 w-4 text-green-600" />
-            case 'processed':
-                return <Clock className="h-4 w-4 text-blue-600" />
-            case 'processing':
-                return <RefreshCw className="h-4 w-4 text-yellow-600 animate-spin" />
-            case 'failed':
-                return <XCircle className="h-4 w-4 text-red-600" />
-            default:
-                return <AlertCircle className="h-4 w-4 text-gray-600" />
-        }
-    }
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'verified':
-                return 'bg-green-100 text-green-800'
-            case 'processed':
-                return 'bg-blue-100 text-blue-800'
-            case 'processing':
-                return 'bg-yellow-100 text-yellow-800'
-            case 'failed':
-                return 'bg-red-100 text-red-800'
-            default:
-                return 'bg-gray-100 text-gray-800'
-        }
-    }
-
-    // Group test results by category
-    const groupTestsByCategory = (tests: ExtractedTest[]) => {
-        return tests.reduce((acc, test) => {
-            const category = test.category || 'UNCATEGORIZED'
-            if (!acc[category]) {
-                acc[category] = []
-            }
-            acc[category].push(test)
-            return acc
-        }, {} as Record<string, ExtractedTest[]>)
-    }
 
     const renderPagination = (paginationData: PaginationData, onPageChange: (page: number) => void) => {
         if (!paginationData || paginationData.last_page <= 1) return null
@@ -607,201 +479,6 @@ export default function PatientPage() {
                     </div>
                 </div>
 
-                {/* Patient Details Modal */}
-                {showPatientModal && selectedPatient && (
-                    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-                        <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                            {/* Background overlay */}
-                            <div
-                                className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-                                aria-hidden="true"
-                                onClick={() => setShowPatientModal(false)}
-                            ></div>
-
-                            {/* This element is to trick the browser into centering the modal contents. */}
-                            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-                            {/* Modal panel */}
-                            <div className="relative inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full">
-                                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                                    <div className="sm:flex sm:items-start">
-                                        <div className="w-full">
-                                            {/* Modal Header */}
-                                            <div className="flex items-center justify-between border-b border-gray-200 pb-4 mb-6">
-                                                <div className="flex items-center">
-                                                    <div className="flex-shrink-0 h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-                                                        <User className="h-6 w-6 text-blue-600" />
-                                                    </div>
-                                                    <div className="ml-4">
-                                                        <h3 className="text-lg leading-6 font-medium text-gray-900">
-                                                            {selectedPatient.name}
-                                                        </h3>
-                                                        <p className="text-sm text-gray-500">
-                                                            Patient ID: {selectedPatient.patient_id}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={() => setShowPatientModal(false)}
-                                                    className="rounded-md bg-white text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                >
-                                                    <span className="sr-only">Close</span>
-                                                    <XCircle className="h-6 w-6" />
-                                                </button>
-                                            </div>
-
-                                            {/* Patient Info */}
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                                                <div className="bg-gray-50 rounded-lg p-4">
-                                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Personal Information</h4>
-                                                    <div className="space-y-2 text-sm">
-                                                        <div><span className="font-medium text-gray-700">Age:</span> <span className="text-gray-900">{selectedPatient.age}</span></div>
-                                                        <div><span className="font-medium text-gray-700">Gender:</span> <span className="text-gray-900">{selectedPatient.gender}</span></div>
-                                                        <div><span className="font-medium text-gray-700">Phone:</span> <span className="text-gray-900">{selectedPatient.phone || 'Not provided'}</span></div>
-                                                        <div><span className="font-medium text-gray-700">Email:</span> <span className="text-gray-900">{selectedPatient.email || 'Not provided'}</span></div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="bg-gray-50 rounded-lg p-4">
-                                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Account Information</h4>
-                                                    <div className="space-y-2 text-sm">
-                                                        <div><span className="font-medium text-gray-700">Created:</span> <span className="text-gray-900">{formatDate(selectedPatient.created_at)}</span></div>
-                                                        <div><span className="font-medium text-gray-700">Updated:</span> <span className="text-gray-900">{formatDate(selectedPatient.updated_at)}</span></div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="bg-gray-50 rounded-lg p-4">
-                                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Lab Reports Summary</h4>
-                                                    <div className="space-y-2 text-sm">
-                                                        <div><span className="font-medium text-gray-700">Total Reports:</span> <span className="text-gray-900">{selectedPatient.lab_reports_count}</span></div>
-                                                        <div><span className="font-medium text-gray-700">Latest Report:</span> <span className="text-gray-900">{formatDate(selectedPatient.latest_report_date)}</span></div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Lab Reports Section */}
-                                            <div>
-                                                <h4 className="text-lg font-medium text-gray-900 mb-4">Lab Reports</h4>
-
-                                                {loadingReports ? (
-                                                    <div className="flex items-center justify-center py-8">
-                                                        <RefreshCw className="h-6 w-6 animate-spin text-blue-600 mr-2" />
-                                                        <span className="text-gray-600">Loading reports...</span>
-                                                    </div>
-                                                ) : patientReports.length === 0 ? (
-                                                    <div className="text-center py-8">
-                                                        <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                                                        <h3 className="text-lg font-medium text-gray-900 mb-2">No Lab Reports</h3>
-                                                        <p className="text-gray-500">This patient doesn&apos;t have any lab reports yet.</p>
-                                                    </div>
-                                                ) : (
-                                                    <div className="space-y-4">
-                                                        {patientReports.map((report) => (
-                                                            <div key={report.id} className="border border-gray-200 rounded-lg p-4">
-                                                                <div className="flex items-center justify-between mb-4">
-                                                                    <div className="flex items-center">
-                                                                        <FileText className="h-5 w-5 text-gray-400 mr-2" />
-                                                                        <div>
-                                                                            <h5 className="text-sm font-medium text-gray-900">
-                                                                                {report.original_filename}
-                                                                            </h5>
-                                                                            <p className="text-xs text-gray-500">
-                                                                                Batch: {report.batch.name}
-                                                                            </p>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="flex items-center space-x-2">
-                                                                        {getStatusIcon(report.status)}
-                                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(report.status)}`}>
-                                                                            {report.status}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-
-                                                                {/* Lab Info */}
-                                                                {report.extracted_lab_info && (
-                                                                    <div className="mb-4 p-3 bg-gray-50 rounded-md">
-                                                                        <h6 className="text-xs font-medium text-gray-700 mb-2">LAB INFORMATION</h6>
-                                                                        <div className="grid grid-cols-2 gap-2 text-xs">
-                                                                            <div><span className="font-medium text-gray-700">Lab ID:</span> <span className="text-gray-900">{report.extracted_lab_info.lab_id}</span></div>
-                                                                            <div><span className="font-medium text-gray-700">Requested By:</span> <span className="text-gray-900">{report.extracted_lab_info.requested_by}</span></div>
-                                                                            <div><span className="font-medium text-gray-700">Collected:</span> <span className="text-gray-900">{formatDate(report.extracted_lab_info.collected_date)}</span></div>
-                                                                            <div><span className="font-medium text-gray-700">Analyzed:</span> <span className="text-gray-900">{formatDate(report.extracted_lab_info.analysis_date)}</span></div>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-
-                                                                {/* Test Results */}
-                                                                {report.extracted_data.length > 0 && (
-                                                                    <div>
-                                                                        <h6 className="text-xs font-medium text-gray-500 mb-2">TEST RESULTS ({report.extracted_data.length})</h6>
-                                                                        <div className="space-y-3">
-                                                                            {Object.entries(groupTestsByCategory(report.extracted_data)).map(([category, tests]) => (
-                                                                                <div key={category} className="border border-gray-100 rounded-md">
-                                                                                    <div className="bg-gray-50 px-3 py-2 border-b border-gray-100">
-                                                                                        <span className="text-xs font-medium text-gray-700 uppercase">{category}</span>
-                                                                                    </div>
-                                                                                    <div className="p-3">
-                                                                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                                                                            {tests.map((test) => (
-                                                                                                <div key={test.id} className="text-xs">
-                                                                                                    <div className="font-medium text-gray-900">{test.test_name}</div>
-                                                                                                    <div className="text-gray-600">
-                                                                                                        {test.result} {test.unit}
-                                                                                                        {test.flag && (
-                                                                                                            <span className="ml-1 text-red-600 font-medium">({test.flag})</span>
-                                                                                                        )}
-                                                                                                    </div>
-                                                                                                    {test.reference && (
-                                                                                                        <div className="text-gray-400">Ref: {test.reference}</div>
-                                                                                                    )}
-                                                                                                </div>
-                                                                                            ))}
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-
-                                                                {/* Report metadata */}
-                                                                <div className="mt-4 pt-3 border-t border-gray-100">
-                                                                    <div className="flex items-center justify-between text-xs text-gray-500">
-                                                                        <div>
-                                                                            <span>Uploaded by: {report.uploader.name}</span>
-                                                                            {report.verifier && (
-                                                                                <span className="ml-4">Verified by: {report.verifier.name}</span>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="flex items-center space-x-2">
-                                                                            <button
-                                                                                onClick={() => router.push(`/main/reports/report-details?id=${report.id}`)}
-                                                                                className="text-blue-600 hover:text-blue-800 font-medium"
-                                                                            >
-                                                                                View Details
-                                                                            </button>
-                                                                            <button className="text-gray-600 hover:text-gray-800">
-                                                                                <Download className="h-3 w-3" />
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-
-                                                        {/* Reports Pagination */}
-                                                        {reportsPagination && renderPagination(reportsPagination, handleReportsPageChange)}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
         </DashboardLayout>
     )

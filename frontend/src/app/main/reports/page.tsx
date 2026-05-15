@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { Search, Download, Eye, CheckCircle, Clock, Calendar, FileText, Users, AlertTriangle } from 'lucide-react'
+import { Search, Eye, CheckCircle, Clock, FileText, Users } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 
 interface ExtractedData {
@@ -69,18 +69,9 @@ interface Report {
     }
 }
 
-interface Batch {
-    id: string
-    name: string
-    createdAt: string
-    reportCount: number
-    verifiedCount: number
-    status: 'completed' | 'processing' | 'pending'
-    templateType: string
-}
 
 export default function ReportsPage() {
-    const [activeTab, setActiveTab] = useState<'all' | 'verified' | 'unverified' | 'batches'>('all')
+    const [activeTab, setActiveTab] = useState<'all' | 'verified' | 'unverified'>('all')
     const [searchQuery, setSearchQuery] = useState('')
     const [filterBatch, setFilterBatch] = useState('all') // Changed from filterType to filterBatch
     const [reports, setReports] = useState<Report[]>([])
@@ -95,10 +86,7 @@ export default function ReportsPage() {
             setLoading(true)
             setError('')
 
-            console.log('🚀 Fetching lab reports...')
             const response = await apiClient.get('/lab-reports')
-            console.log('✅ API Response:', response)
-            console.log('📊 Response data:', response.data)
 
             // Handle response structure
             let reportsData: ApiReport[] = []
@@ -113,11 +101,9 @@ export default function ReportsPage() {
                 reportsData = []
             }
 
-            console.log('📋 Reports data:', reportsData)
 
             // Transform API data to match our interface
             const transformedReports: Report[] = reportsData.map((report: ApiReport) => {
-                console.log('🔄 Transforming report:', report)
 
                 // Extract patient name from extracted data or use fallback
                 const patientName = report.extracted_data?.patientInfo?.name ||
@@ -162,7 +148,7 @@ export default function ReportsPage() {
                     batchId: batchId,
                     extractedData: report.extracted_data,
                     verifiedBy: report.verified_by || undefined,
-                    priority: 'medium',
+                    priority: 'medium' as const,
                     original_filename: report.original_filename,
                     uploader: report.uploader,
                     created_at: report.created_at,
@@ -176,7 +162,6 @@ export default function ReportsPage() {
                 }
             })
 
-            console.log('✅ Transformed reports:', transformedReports)
             setReports(transformedReports)
 
             // Extract unique batches for filter dropdown
@@ -191,12 +176,10 @@ export default function ReportsPage() {
                 return acc
             }, [])
 
-            console.log('📦 Available batches:', uniqueBatches)
             setAvailableBatches(uniqueBatches)
 
         } catch (err: unknown) {
-            console.error('💥 Failed to fetch reports:', err)
-            console.error('📝 Error details:', isApiError(err) ? err.response?.data : err)
+            console.error('Failed to fetch reports:', err)
 
             let errorMessage = 'Failed to load reports'
             if (isApiError(err) && err.response?.status === 401) {
@@ -264,90 +247,11 @@ export default function ReportsPage() {
         }
     }
 
-    const getPriorityBadge = (priority: string) => {
-        switch (priority) {
-            case 'high':
-                return (
-                    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
-                        <AlertTriangle className="h-3 w-3 mr-1" />
-                        High
-                    </span>
-                )
-            case 'medium':
-                return (
-                    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                        Medium
-                    </span>
-                )
-            case 'low':
-                return (
-                    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
-                        Low
-                    </span>
-                )
-            default:
-                return null
-        }
     }
 
-    // Mock batches data for batch history tab
-    const batches: Batch[] = [
-        {
-            id: 'batch_001',
-            name: 'Morning Reports - Jan 15',
-            createdAt: '2024-01-15T10:30:00Z',
-            reportCount: 5,
-            verifiedCount: 3,
-            status: 'completed',
-            templateType: 'Laboratory Report'
-        },
-        {
-            id: 'batch_002',
-            name: 'Afternoon Reports - Jan 15',
-            createdAt: '2024-01-15T14:00:00Z',
-            reportCount: 3,
-            verifiedCount: 2,
-            status: 'completed',
-            templateType: 'Mixed Templates'
-        },
-        {
-            id: 'batch_003',
-            name: 'Evening Reports - Jan 16',
-            createdAt: '2024-01-16T18:00:00Z',
-            reportCount: 7,
-            verifiedCount: 0,
-            status: 'processing',
-            templateType: 'X-Ray Report'
-        }
-    ]
 
-    const getBatchStatusBadge = (status: string) => {
-        switch (status) {
-            case 'completed':
-                return (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Completed
-                    </span>
-                )
-            case 'processing':
-                return (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        <Clock className="h-3 w-3 mr-1" />
-                        Processing
-                    </span>
-                )
-            case 'pending':
-                return (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        <Clock className="h-3 w-3 mr-1" />
-                        Pending
-                    </span>
-                )
-            default:
-                return null
-        }
-    }
+
+
 
     const stats = {
         total: reports.length,
@@ -358,7 +262,6 @@ export default function ReportsPage() {
 
     // Handle view report details
     const handleViewReport = (reportId: string) => {
-        console.log('🔍 Viewing report details for ID:', reportId)
         router.push(`/main/reports/report-details?id=${reportId}`)
     }
 
@@ -453,8 +356,7 @@ export default function ReportsPage() {
                                 { key: 'all', label: 'All Reports', count: stats.total },
                                 { key: 'verified', label: 'Verified', count: stats.verified },
                                 { key: 'unverified', label: 'Unverified', count: stats.unverified },
-                                { key: 'batches', label: 'Batch History', count: batches.length }
-                            ] as Array<{ key: 'all' | 'verified' | 'unverified' | 'batches'; label: string; count: number }>).map((tab) => (
+                            ] as Array<{ key: 'all' | 'verified' | 'unverified'; label: string; count: number }>).map((tab) => (
                                 <button
                                     key={tab.key}
                                     onClick={() => setActiveTab(tab.key)}
@@ -522,9 +424,6 @@ export default function ReportsPage() {
                                             Status
                                         </th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Priority
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Processed Date
                                         </th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -560,9 +459,6 @@ export default function ReportsPage() {
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {getStatusBadge(report.status)}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {getPriorityBadge(report.priority)}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                 {formatDate(report.processedDate)}
@@ -610,75 +506,6 @@ export default function ReportsPage() {
                                     </p>
                                 </div>
                             )}
-                        </div>
-                    ) : (
-                        /* Batch History Table */
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Batch Details
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Template Type
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Reports
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Status
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Created Date
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Actions
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {batches.map((batch) => (
-                                        <tr key={batch.id} className="hover:bg-gray-50">
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="flex items-center">
-                                                    <Calendar className="h-5 w-5 text-gray-400 mr-3" />
-                                                    <div>
-                                                        <div className="text-sm font-medium text-gray-900">
-                                                            {batch.name}
-                                                        </div>
-                                                        <div className="text-sm text-gray-500">
-                                                            ID: {batch.id}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {batch.templateType}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                {batch.verifiedCount}/{batch.reportCount} verified
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {getBatchStatusBadge(batch.status)}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {formatDate(batch.createdAt)}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                <div className="flex space-x-2">
-                                                    <button className="text-blue-600 hover:text-blue-900">
-                                                        <Eye className="h-4 w-4" />
-                                                    </button>
-                                                    <button className="text-green-600 hover:text-green-900">
-                                                        <Download className="h-4 w-4" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
                         </div>
                     )}
                 </div>

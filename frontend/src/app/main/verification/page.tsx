@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import {
   ArrowLeft,
   FileText,
@@ -157,6 +158,7 @@ export default function VerificationPage() {
   const batchId = searchParams.get("batchId");
   const reportId = searchParams.get("reportId");
   const { user } = useAuth();
+  const toast = useToast();
 
   const [reports, setReports] = useState<ProcessedReport[]>([]);
   const [selectedReport, setSelectedReport] = useState<ProcessedReport | null>(
@@ -758,7 +760,7 @@ export default function VerificationPage() {
         errorMessage = err.message;
       }
 
-      alert(`Verification Error: ${errorMessage}`);
+      toast.error(`Verification Error: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -782,7 +784,7 @@ export default function VerificationPage() {
       }
     } catch (err: unknown) {
       console.error("💥 Failed to save for later:", err);
-      alert("Failed to save report for later verification");
+      toast.error("Failed to save report for later verification");
     } finally {
       setIsSubmitting(false);
     }
