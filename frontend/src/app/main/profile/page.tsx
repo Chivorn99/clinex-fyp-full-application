@@ -123,8 +123,6 @@ export default function ProfilePage() {
                         profileImage: response.data.profile_picture_url || userData.profileImage
                     })
                 }
-                
-                console.log('Profile updated successfully')
             }
         } catch (error) {
             console.error('Failed to update profile:', error)

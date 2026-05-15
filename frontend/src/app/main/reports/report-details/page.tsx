@@ -93,8 +93,6 @@ export default function ReportDetailsPage() {
         try {
             setLoading(true)
             setError('')
-
-            console.log('🚀 Fetching report details for ID:', reportId)
             const response = await apiClient.get(`/lab-reports/${reportId}`)
 
             if (response.success && response.data?.lab_report) {
@@ -141,7 +139,7 @@ export default function ReportDetailsPage() {
                 throw new Error('Invalid response structure')
             }
         } catch (err: unknown) {
-            console.error('💥 Failed to fetch report details:', err)
+            console.error('Failed to fetch report details:', err)
             let errorMessage = 'Failed to load report details'
 
             if (isApiError(err) && err.response?.status === 404) {
@@ -206,7 +204,6 @@ export default function ReportDetailsPage() {
     const handleExportCsv = async () => {
         try {
             setIsExportingCsv(true)
-            console.log('🚀 Starting CSV export for report:', reportId)
             // Use fetch for blob response
             const token = localStorage.getItem('auth_token')
             const fetchResponse = await fetch(`http://localhost:8000/api/lab-reports/export/verified-csv?report_id=${reportId}`, {

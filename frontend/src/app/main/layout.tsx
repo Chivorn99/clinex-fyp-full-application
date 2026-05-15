@@ -14,4 +14,4 @@ export default function MainLayout({
       </ToastProvider>
     </ProtectedRoute>
   )
-}
+}

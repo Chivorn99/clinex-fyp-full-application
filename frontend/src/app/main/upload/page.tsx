@@ -212,7 +212,7 @@ export default function UploadPage() {
 
             clearInterval(progressInterval)
 
-            console.log('Full response:', response) // Debug log
+
 
             // Handle different response structures
             let batch: BatchResponse
@@ -243,7 +243,6 @@ export default function UploadPage() {
                     router.push(`/main/verification?batchId=${batch.id}`)
                 }, 1500)
             } else {
-                console.log('Batch uploaded successfully. Ready for manual processing.')
             }
 
         } catch (error: unknown) {

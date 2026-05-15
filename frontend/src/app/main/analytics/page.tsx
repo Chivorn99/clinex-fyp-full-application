@@ -73,9 +73,6 @@ interface AnalyticsData {
         verificationsCount: number
     }>
     processingStats: {
-        averageTime: number
-        fastestTime: number
-        slowestTime: number
         successRate: number
     }
 }
@@ -219,18 +216,11 @@ export default function AnalyticsPage() {
         try {
             setLoading(true)
             setError('')
-
-            console.log('🚀 Fetching analytics data...')
-
             const [patientsResponse, reportsResponse] = await Promise.all([
                 apiClient.get('/patients?per_page=1000'),
                 apiClient.get('/lab-reports?per_page=1000')
             ])
 
-            console.log('✅ Raw API data:', {
-                patients: patientsResponse.data,
-                reports: reportsResponse.data
-            })
 
             const patients = (patientsResponse.data as ApiListResponse<PatientRecord>)?.data || []
             const reports = (reportsResponse.data as ApiListResponse<ReportRecord>)?.data || []
@@ -241,7 +231,7 @@ export default function AnalyticsPage() {
             const pendingReports = reports.filter((r: ReportRecord) => r.status === 'processed').length
             const failedReports = reports.filter((r: ReportRecord) => r.status === 'failed').length
 
-            const averageProcessingTime = 2.5
+
             const daily = generateDailyTrends(reports, patients, parseInt(timeRange))
             const monthly = generateMonthlyTrends(reports, patients)
             const testCategories = processTestCategories(reports)
@@ -249,9 +239,6 @@ export default function AnalyticsPage() {
             const userActivity = processUserActivity(reports)
 
             const processingStats = {
-                averageTime: 2.5,
-                fastestTime: 0.8,
-                slowestTime: 15.2,
                 successRate: totalReports > 0 ? ((verifiedReports + pendingReports) / totalReports) * 100 : 0
             }
 
@@ -273,11 +260,8 @@ export default function AnalyticsPage() {
                 userActivity,
                 processingStats
             })
-
-            console.log('✅ Analytics data processed successfully')
-
         } catch (err: unknown) {
-            console.error('💥 Failed to fetch analytics data:', err)
+            console.error('Failed to fetch analytics data:', err)
             setError('Failed to load analytics data')
         } finally {
             setLoading(false)
@@ -416,11 +400,11 @@ export default function AnalyticsPage() {
                             <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <p className="text-orange-100 text-sm font-medium">Avg. Processing</p>
-                                        <p className="text-3xl font-bold">{analyticsData.processingStats.averageTime}min</p>
+                                        <p className="text-orange-100 text-sm font-medium">Success Rate</p>
+                                        <p className="text-3xl font-bold">{analyticsData.processingStats.successRate.toFixed(1)}%</p>
                                         <p className="text-orange-100 text-sm mt-1">
                                             <Zap className="h-4 w-4 inline mr-1" />
-                                            {analyticsData.processingStats.successRate.toFixed(1)}% success rate
+                                            Processing accuracy
                                         </p>
                                     </div>
                                     <Activity className="h-12 w-12 text-orange-200" />
@@ -453,8 +437,12 @@ export default function AnalyticsPage() {
                             <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-400">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <p className="text-gray-600 text-sm font-medium">Fastest Processing</p>
-                                        <p className="text-2xl font-bold text-green-600">{analyticsData.processingStats.fastestTime}min</p>
+                                        <p className="text-gray-600 text-sm font-medium">Verified Rate</p>
+                                        <p className="text-2xl font-bold text-green-600">
+                                            {analyticsData.overview.totalReports > 0 
+                                                ? Math.round((analyticsData.overview.verifiedReports / analyticsData.overview.totalReports) * 100)
+                                                : 0}%
+                                        </p>
                                     </div>
                                     <Target className="h-8 w-8 text-green-400" />
                                 </div>
@@ -621,15 +609,15 @@ export default function AnalyticsPage() {
                                     <div className="bg-white bg-opacity-20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
                                         <Zap className="h-8 w-8" />
                                     </div>
-                                    <p className="text-2xl font-bold">{analyticsData.processingStats.averageTime}min</p>
-                                    <p className="text-sm opacity-90">Avg. Processing</p>
+                                    <p className="text-2xl font-bold">{analyticsData.overview.verifiedReports}</p>
+                                    <p className="text-sm opacity-90">Verified</p>
                                 </div>
                                 <div className="text-center">
                                     <div className="bg-white bg-opacity-20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
                                         <Award className="h-8 w-8" />
                                     </div>
-                                    <p className="text-2xl font-bold">{analyticsData.processingStats.fastestTime}min</p>
-                                    <p className="text-sm opacity-90">Fastest Time</p>
+                                    <p className="text-2xl font-bold">{analyticsData.overview.pendingReports}</p>
+                                    <p className="text-sm opacity-90">Pending</p>
                                 </div>
                                 <div className="text-center">
                                     <div className="bg-white bg-opacity-20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">

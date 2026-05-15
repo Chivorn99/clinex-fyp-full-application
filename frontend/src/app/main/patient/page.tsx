@@ -73,12 +73,7 @@ export default function PatientPage() {
             if (selectedGender) {
                 params.append('gender', selectedGender)
             }
-
-            console.log('🚀 Fetching patients with params:', params.toString())
-
             const response = await apiClient.get(`/patients?${params.toString()}`)
-            console.log('✅ Patients API Response:', response)
-
             if (response.success && response.data) {
                 setPatients(response.data.data || [])
                 setPagination({
@@ -91,14 +86,12 @@ export default function PatientPage() {
                     next_page_url: response.data.next_page_url,
                     prev_page_url: response.data.prev_page_url
                 })
-
-                console.log(`✅ Loaded ${response.data.data?.length || 0} patients`)
             } else {
                 throw new Error('Invalid response structure')
             }
 
         } catch (err: unknown) {
-            console.error('💥 Failed to fetch patients:', err)
+            console.error('Failed to fetch patients:', err)
             if (isApiError(err) && err.response?.data?.message) {
                 setError(err.response.data.message)
             } else {
@@ -242,6 +235,20 @@ export default function PatientPage() {
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    {loading ? (
+                        Array.from({ length: 4 }).map((_, i) => (
+                            <div key={i} className="bg-white rounded-lg shadow p-6 animate-pulse">
+                                <div className="flex items-center">
+                                    <div className="p-3 rounded-full bg-gray-200 h-12 w-12" />
+                                    <div className="ml-4 flex-1">
+                                        <div className="h-4 bg-gray-200 rounded w-24 mb-2" />
+                                        <div className="h-7 bg-gray-200 rounded w-12" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                    <>
                     <div className="bg-white rounded-lg shadow p-6">
                         <div className="flex items-center">
                             <div className="p-3 rounded-full bg-blue-100 text-blue-600">
@@ -299,6 +306,8 @@ export default function PatientPage() {
                             </div>
                         </div>
                     </div>
+                    </>
+                    )}
                 </div>
 
                 {/* Search and Filters */}
@@ -347,11 +356,29 @@ export default function PatientPage() {
                     {/* Patients Table */}
                     <div className="overflow-hidden">
                         {loading ? (
-                            <div className="flex items-center justify-center py-12">
-                                <div className="flex items-center space-x-2">
-                                    <RefreshCw className="h-6 w-6 animate-spin text-blue-600" />
-                                    <span className="text-gray-600">Loading patients...</span>
-                                </div>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient Info</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reports</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Activity</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {Array.from({ length: 6 }).map((_, i) => (
+                                            <tr key={i} className="animate-pulse">
+                                                <td className="px-6 py-4"><div className="flex items-center"><div className="h-10 w-10 bg-gray-200 rounded-full mr-3" /><div><div className="h-4 bg-gray-200 rounded w-32 mb-1" /><div className="h-3 bg-gray-200 rounded w-20" /></div></div></td>
+                                                <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-24 mb-1" /><div className="h-3 bg-gray-200 rounded w-32" /></td>
+                                                <td className="px-6 py-4"><div className="h-6 bg-gray-200 rounded-full w-8" /></td>
+                                                <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-28" /></td>
+                                                <td className="px-6 py-4"><div className="h-8 bg-gray-200 rounded w-20" /></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         ) : error ? (
                             <div className="flex items-center justify-center py-12">

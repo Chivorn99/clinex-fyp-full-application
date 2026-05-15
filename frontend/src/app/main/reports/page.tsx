@@ -97,7 +97,7 @@ export default function ReportsPage() {
             } else if (response.data?.reports && Array.isArray(response.data.reports)) {
                 reportsData = response.data.reports
             } else {
-                console.warn('⚠️ Unexpected response structure:', response.data)
+                console.warn('Unexpected response structure:', response.data)
                 reportsData = []
             }
 
@@ -310,6 +310,20 @@ export default function ReportsPage() {
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    {loading ? (
+                        Array.from({ length: 4 }).map((_, i) => (
+                            <div key={i} className="bg-white p-6 rounded-lg shadow animate-pulse">
+                                <div className="flex items-center">
+                                    <div className="h-8 w-8 bg-gray-200 rounded" />
+                                    <div className="ml-4 flex-1">
+                                        <div className="h-4 bg-gray-200 rounded w-24 mb-2" />
+                                        <div className="h-7 bg-gray-200 rounded w-12" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                    <>
                     <div className="bg-white p-6 rounded-lg shadow">
                         <div className="flex items-center">
                             <FileText className="h-8 w-8 text-blue-600" />
@@ -346,6 +360,8 @@ export default function ReportsPage() {
                             </div>
                         </div>
                     </div>
+                    </>
+                    )}
                 </div>
 
                 {/* Tabs and Filters */}
@@ -432,7 +448,27 @@ export default function ReportsPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
-                                    {filteredReports.map((report) => (
+                                    {loading ? (
+                                        Array.from({ length: 5 }).map((_, i) => (
+                                            <tr key={i} className="animate-pulse">
+                                                <td className="px-6 py-4"><div className="flex items-center"><div className="h-5 w-5 bg-gray-200 rounded mr-3" /><div><div className="h-4 bg-gray-200 rounded w-40 mb-1" /><div className="h-3 bg-gray-200 rounded w-24" /></div></div></td>
+                                                <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-28" /></td>
+                                                <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-20" /></td>
+                                                <td className="px-6 py-4"><div className="h-5 bg-gray-200 rounded-full w-16" /></td>
+                                                <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-24" /></td>
+                                                <td className="px-6 py-4"><div className="h-8 bg-gray-200 rounded w-16" /></td>
+                                            </tr>
+                                        ))
+                                    ) : filteredReports.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="px-6 py-12 text-center">
+                                                <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                                                <h3 className="text-lg font-medium text-gray-900 mb-1">No Reports Found</h3>
+                                                <p className="text-sm text-gray-500">Try adjusting your filters or search query.</p>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                    filteredReports.map((report) => (
                                         <tr
                                             key={report.id}
                                             className="hover:bg-gray-50 cursor-pointer"
@@ -493,19 +529,6 @@ export default function ReportsPage() {
                                     ))}
                                 </tbody>
                             </table>
-
-                            {filteredReports.length === 0 && !loading && (
-                                <div className="text-center py-12">
-                                    <FileText className="mx-auto h-12 w-12 text-gray-400" />
-                                    <h3 className="mt-2 text-sm font-medium text-gray-900">No reports found</h3>
-                                    <p className="mt-1 text-sm text-gray-500">
-                                        {searchQuery || filterBatch !== 'all'
-                                            ? 'Try adjusting your search or filter criteria.'
-                                            : 'No reports have been uploaded yet.'
-                                        }
-                                    </p>
-                                </div>
-                            )}
                         </div>
                     )}
                 </div>

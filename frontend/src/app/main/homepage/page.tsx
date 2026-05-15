@@ -53,9 +53,6 @@ export default function HomePage() {
         try {
             setLoading(true)
             setError('')
-            
-            console.log('🚀 Fetching dashboard statistics...')
-            
             // Fetch all required data in parallel
             const [patientsResponse, reportsResponse, batchesResponse] = await Promise.all([
                 apiClient.get('/patients?per_page=1'), 
@@ -63,11 +60,6 @@ export default function HomePage() {
                 apiClient.get('/batches?per_page=50')
             ])
 
-            console.log('✅ API Responses:', {
-                patients: patientsResponse,
-                reports: reportsResponse,
-                batches: batchesResponse
-            })
 
             const reports: ApiReport[] = reportsResponse.data?.data || []
 
@@ -104,16 +96,10 @@ export default function HomePage() {
                 recentReports
             })
 
-            console.log('✅ Dashboard stats calculated:', {
-                totalPatients,
-                todaysUploads,
-                pendingReports,
-                monthlyReports,
-                recentReportsCount: recentReports.length
-            })
+
 
         } catch (err: unknown) {
-            console.error('💥 Failed to fetch dashboard stats:', err)
+            console.error('Failed to fetch dashboard stats:', err)
             setError('Failed to load dashboard statistics')
             
             // Fallback to mock data

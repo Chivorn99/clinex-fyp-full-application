@@ -217,11 +217,7 @@ export default function VerificationPage() {
       setPdfLoading(true);
       setPdfError("");
       setFileContentType("");
-
-      console.log("🚀 Fetching file data for report ID:", reportId);
       const response = await apiClient.get(`/${reportId}/pdf-data`);
-      console.log("✅ File API Response:", response);
-
       if (response.success && response.data?.base64_content) {
         const base64 = response.data.base64_content;
         const contentType = response.data.content_type || "application/pdf";
@@ -232,7 +228,7 @@ export default function VerificationPage() {
         throw new Error("Invalid file response structure");
       }
     } catch (err: unknown) {
-      console.error("💥 Failed to fetch file data:", err);
+      console.error("Failed to fetch file data:", err);
       let errorMessage = "Failed to load document preview";
 
       if (isApiError(err) && err.status === 404) {
@@ -254,8 +250,6 @@ export default function VerificationPage() {
       labReport: BackendLabReport,
       extractedData?: BackendExtractedData,
     ): ProcessedReport => {
-      console.log("🔄 Transforming lab report:", labReport.id);
-
       const rawOcrText = labReport.raw_ocr_text || extractedData?.rawText || "";
 
       const transformed: ProcessedReport = {
@@ -301,11 +295,6 @@ export default function VerificationPage() {
         rawOcrText,
       };
 
-      console.log("✅ Transformed report:", {
-        id: transformed.id,
-        fileName: transformed.fileName,
-        testResultsCount: transformed.testResults.length,
-      });
 
       return transformed;
     },
@@ -333,19 +322,11 @@ export default function VerificationPage() {
   const fetchSingleReport = useCallback(
     async (id: string) => {
       try {
-        console.log("🚀 Fetching single report:", id);
-
         const response = await apiClient.get(`/lab-reports/${id}`);
-        console.log("✅ Single report API Response:", response);
-
         if (response.success && response.data?.lab_report) {
           const labReport: BackendLabReport = response.data.lab_report;
           const extractedData: BackendExtractedData | undefined =
             response.data.extracted_data;
-
-          console.log("📊 Lab Report Data:", labReport);
-          console.log("📋 Extracted Data:", extractedData);
-
           const transformedReport = transformLabReportToProcessedReport(
             labReport,
             extractedData,
@@ -364,13 +345,11 @@ export default function VerificationPage() {
               status: labReport.batch.status,
             });
           }
-
-          console.log("✅ Single report loaded successfully");
         } else {
           throw new Error("Invalid response structure");
         }
       } catch (err: unknown) {
-        console.error("💥 Failed to fetch single report:", err);
+        console.error("Failed to fetch single report:", err);
         handleFetchError(err, `report ${id}`);
         setPageError(`Failed to load report. Please try again.`);
       } finally {
@@ -382,13 +361,9 @@ export default function VerificationPage() {
 
   const fetchBatchReports = useCallback(async () => {
     try {
-      console.log("🚀 Fetching reports for batch:", batchId);
-
       const response = await apiClient.get(
         `/batches/${batchId}/reports-for-verification`,
       );
-      console.log("✅ Batch reports API Response:", response);
-
       const apiResponse = response.data;
 
       if (
@@ -427,10 +402,8 @@ export default function VerificationPage() {
           await fetchPdfData(targetReport.id);
         }
       }
-
-      console.log("✅ Batch reports loaded successfully");
     } catch (err: unknown) {
-      console.error("💥 Failed to fetch batch reports:", err);
+      console.error("Failed to fetch batch reports:", err);
       handleFetchError(err, `batch ${batchId}`);
       setPageError(`Failed to load batch reports. Please try again.`);
     } finally {
@@ -516,7 +489,6 @@ export default function VerificationPage() {
   useEffect(() => {
     if (!isProcessing) return;
     const interval = setInterval(() => {
-      console.log('🔄 Auto-refreshing (batch still processing)...');
       fetchBatchReports();
     }, 5000);
     return () => clearInterval(interval);
@@ -653,10 +625,6 @@ export default function VerificationPage() {
     setIsSubmitting(true);
 
     try {
-      console.log(
-        "🚀 Starting verification submission for report:",
-        selectedReport.id,
-      );
 
       const verifiedData = {
         verified_data: {
@@ -686,19 +654,11 @@ export default function VerificationPage() {
         },
         notes: `Verified by ${currentUser.name} on ${new Date().toLocaleDateString()}`,
       };
-
-      console.log("📦 Sending verification data:", verifiedData);
-
       const response = await apiClient.post(
         `/lab-reports/${selectedReport.id}/verify`,
         verifiedData,
       );
-
-      console.log("✅ Verification API Response:", response);
-
       if (response.success) {
-        console.log("🎉 Report verified successfully!");
-
         const updatedReport = {
           ...selectedReport,
           status: "verified" as const,
@@ -716,10 +676,6 @@ export default function VerificationPage() {
 
           if (remainingReports.length > 0) {
             setSelectedReport(remainingReports[0]);
-            console.log(
-              "👆 Auto-selected next report for verification:",
-              remainingReports[0].fileName,
-            );
 
             const newUrl = `/main/verification?batchId=${batchId}&reportId=${remainingReports[0].id}`;
             window.history.replaceState(null, "", newUrl);
@@ -727,7 +683,6 @@ export default function VerificationPage() {
             // Fetch PDF for the next report
             await fetchPdfData(remainingReports[0].id);
           } else {
-            console.log("🏁 All reports in batch verified");
             router.push("/main/verification/monitoring");
           }
         } else {
@@ -737,7 +692,7 @@ export default function VerificationPage() {
         throw new Error(response.message || "Verification failed");
       }
     } catch (err: unknown) {
-      console.error("💥 Verification submission failed:", err);
+      console.error("Verification submission failed:", err);
 
       let errorMessage = "Failed to verify report";
 
@@ -772,10 +727,6 @@ export default function VerificationPage() {
     setIsSubmitting(true);
 
     try {
-      console.log(
-        "💾 Saving report for later verification:",
-        selectedReport.id,
-      );
 
       if (batchId) {
         router.push("/main/verification/monitoring");
@@ -783,7 +734,7 @@ export default function VerificationPage() {
         router.push("/main/reports?status=processed");
       }
     } catch (err: unknown) {
-      console.error("💥 Failed to save for later:", err);
+      console.error("Failed to save for later:", err);
       toast.error("Failed to save report for later verification");
     } finally {
       setIsSubmitting(false);

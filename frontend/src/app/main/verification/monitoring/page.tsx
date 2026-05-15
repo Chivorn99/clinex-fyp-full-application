@@ -125,9 +125,6 @@ export default function VerificationPage() {
             }
 
             const response = await apiClient.get(`/reports-for-verification?${params.toString()}`)
-
-            console.log('API Response:', response.data)
-
             const responseData = response.data
 
             if (isWrappedResponse(responseData)) {
