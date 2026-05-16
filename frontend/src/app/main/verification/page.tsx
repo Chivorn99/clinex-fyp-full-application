@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -1046,11 +1047,16 @@ export default function VerificationPage() {
                       className={`${isPreviewExpanded ? "h-[800px]" : "h-[700px]"} transition-all duration-300`}
                     >
                       {fileContentType.startsWith("image/") ? (
-                        <img
-                          src={pdfDataUrl}
-                          alt="Lab Report Preview"
-                          className="w-full h-full object-contain rounded-md border border-gray-200 shadow-sm bg-gray-50"
-                        />
+                        <div className="relative w-full h-full rounded-md border border-gray-200 shadow-sm bg-gray-50 overflow-hidden">
+                          <Image
+                            src={pdfDataUrl}
+                            alt="Lab Report Preview"
+                            fill
+                            sizes="100vw"
+                            className="object-contain"
+                            unoptimized
+                          />
+                        </div>
                       ) : (
                         <iframe
                           src={pdfDataUrl}
