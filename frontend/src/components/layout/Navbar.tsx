@@ -1,12 +1,11 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X, User, LogOut, Shield, Upload, Layers, FileText, Users, BarChart3 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
 
-// Navigation items in logical lab workflow order
 const NAV_ITEMS = [
     { href: '/main/homepage', label: 'Dashboard', icon: null },
     { href: '/main/upload', label: 'Upload', icon: Upload },
@@ -20,9 +19,55 @@ export default function Navbar() {
     const [isMenuOpen, setIsMenuOpen] = useState(false)
     const [isProfileOpen, setIsProfileOpen] = useState(false)
     const [isLoggingOut, setIsLoggingOut] = useState(false)
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+    const [avatarFailed, setAvatarFailed] = useState(false)
     const { user, logout, hasAnyPermission } = useAuth()
     const pathname = usePathname()
     const showAdminLink = hasAnyPermission(['manage_users', 'manage_templates', 'manage_reports', 'view_analytics', 'view_system_health'])
+
+    const userId = user?.id
+    const userProfilePictureUrl = user?.profile_picture_url
+
+    useEffect(() => {
+        let cancelled = false
+
+        const loadAvatar = async () => {
+            setAvatarFailed(false)
+
+            if (!userId) {
+                setAvatarUrl(null)
+                return
+            }
+
+            if (userProfilePictureUrl) {
+                setAvatarUrl(userProfilePictureUrl)
+                return
+            }
+
+            // Fallback
+            try {
+                const response = await apiClient.get('/profile')
+                const profileUser = (response as { data?: { user?: { profile_picture_url?: string | null } }; user?: { profile_picture_url?: string | null } })?.data?.user ??
+                    (response as { user?: { profile_picture_url?: string | null } })?.user
+
+                const url = profileUser?.profile_picture_url
+
+                if (!cancelled) {
+                    setAvatarUrl(url || null)
+                }
+            } catch {
+                if (!cancelled) {
+                    setAvatarUrl(null)
+                }
+            }
+        }
+
+        loadAvatar()
+
+        return () => {
+            cancelled = true
+        }
+    }, [userId, userProfilePictureUrl])
 
     const isActive = (href: string) => {
         if (href === '/main/homepage') return pathname === '/main/homepage'
@@ -112,8 +157,21 @@ export default function Navbar() {
                                 onClick={() => setIsProfileOpen(!isProfileOpen)}
                                 className="bg-white rounded-full flex text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 hover:ring-2 hover:ring-blue-300"
                             >
-                                <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center">
-                                    <User className="h-5 w-5 text-gray-600" />
+                                <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
+                                    {avatarUrl && !avatarFailed ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            src={avatarUrl}
+                                            alt={user?.name ? `${user.name} profile picture` : 'Profile picture'}
+                                            className="h-8 w-8 object-cover"
+                                            onError={() => {
+                                                setAvatarFailed(true)
+                                                setAvatarUrl(null)
+                                            }}
+                                        />
+                                    ) : (
+                                        <User className="h-5 w-5 text-gray-600" />
+                                    )}
                                 </div>
                             </button>
 
