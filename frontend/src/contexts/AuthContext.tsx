@@ -18,6 +18,7 @@ export interface User {
 interface AuthContextType {
   user: User | null
   login: (token: string, userData: User) => void
+  updateUser: (updates: Partial<User>) => void
   logout: () => void
   isLoading: boolean
   hasPermission: (permission: string) => boolean
@@ -76,6 +77,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(userData)
   }
 
+  const updateUser = useCallback((updates: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return prev
+
+      const next = { ...prev, ...updates }
+      localStorage.setItem('user', JSON.stringify(next))
+      document.cookie = `user_role=${next.role}; path=/; max-age=86400`
+      return next
+    })
+  }, [])
+
   /**
    * Check if the current user has a specific permission.
    * Admin role automatically has ALL permissions.
@@ -94,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [hasPermission])
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading, hasPermission, hasAnyPermission }}>
+    <AuthContext.Provider value={{ user, login, updateUser, logout, isLoading, hasPermission, hasAnyPermission }}>
       {children}
     </AuthContext.Provider>
   )

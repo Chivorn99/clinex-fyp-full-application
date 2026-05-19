@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { Upload, FileText, Trash2, Eye, AlertCircle, CheckCircle, X, AlertTriangle, Image } from 'lucide-react'
+import { Upload, FileText, Trash2, Eye, AlertCircle, CheckCircle, X, AlertTriangle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api'
 
@@ -473,11 +473,14 @@ export default function UploadPage() {
                                             title="PDF Preview"
                                         />
                                     ) : (
-                                        <img
-                                            src={previewUrl}
-                                            className="w-full h-full object-contain rounded-lg"
-                                            alt="Image Preview"
-                                        />
+                                        <>
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img
+                                                src={previewUrl}
+                                                className="w-full h-full object-contain rounded-lg"
+                                                alt="Image Preview"
+                                            />
+                                        </>
                                     )}
                                 </div>
                             ) : (

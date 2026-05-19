@@ -16,7 +16,7 @@ use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
-    // ─── Dashboard Overview ───────────────────────────────────────────
+    // Dashboard Overview
 
     /**
      * Aggregate stats for the admin dashboard overview.
@@ -42,7 +42,7 @@ class AdminController extends Controller
         return response()->json($stats);
     }
 
-    // ─── User Management ──────────────────────────────────────────────
+    // User Management
 
     /**
      * List all users with pagination.
@@ -142,7 +142,7 @@ class AdminController extends Controller
         return response()->json(['message' => 'User deleted successfully.']);
     }
 
-    // ─── Template Management ──────────────────────────────────────────
+    // Template Management
 
     /**
      * List all report templates.
@@ -219,7 +219,7 @@ class AdminController extends Controller
         return response()->json(['message' => 'Template deleted successfully.']);
     }
 
-    // ─── Report Oversight ─────────────────────────────────────────────
+    // Report Oversight
 
     /**
      * List all reports with filters for admin oversight.
@@ -312,7 +312,7 @@ class AdminController extends Controller
         ]);
     }
 
-    // ─── System Health ────────────────────────────────────────────────
+    // System Health
 
     /**
      * System health status — Ollama, DB, queue, disk.

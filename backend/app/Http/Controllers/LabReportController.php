@@ -53,7 +53,7 @@ class LabReportController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to extract data from the document. The format might not be recognized or the file could be empty.'
-                ], 422); // Unprocessable Entity
+                ], 422);
             }
 
             return response()->json([

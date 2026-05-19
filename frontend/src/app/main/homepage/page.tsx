@@ -54,10 +54,9 @@ export default function HomePage() {
             setLoading(true)
             setError('')
             // Fetch all required data in parallel
-            const [patientsResponse, reportsResponse, batchesResponse] = await Promise.all([
+            const [patientsResponse, reportsResponse] = await Promise.all([
                 apiClient.get('/patients?per_page=1'), 
                 apiClient.get('/lab-reports?per_page=10&sort=created_at&order=desc'), 
-                apiClient.get('/batches?per_page=50')
             ])
 
 

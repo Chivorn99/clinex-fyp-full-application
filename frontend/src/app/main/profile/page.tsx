@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { User, Mail, Phone, Calendar, Edit3, Save, X, Camera, Shield } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -9,7 +9,7 @@ import { apiClient } from '@/lib/api'
 type ProfileTab = 'profile' | 'security'
 
 export default function ProfilePage() {
-    const { user: authUser } = useAuth()
+    const { user: authUser, updateUser } = useAuth()
     const [isEditing, setIsEditing] = useState(false)
     const [activeTab, setActiveTab] = useState<ProfileTab>('profile')
     const [loading, setLoading] = useState(true)
@@ -23,6 +23,13 @@ export default function ProfilePage() {
         joinDate: '',
         profileImage: '/api/placeholder/150/150'
     })
+
+    const authUserId = authUser?.id
+    const authUserRef = useRef(authUser)
+
+    useEffect(() => {
+        authUserRef.current = authUser
+    }, [authUser])
 
     useEffect(() => {
         const fetchUserProfile = async () => {
@@ -45,38 +52,40 @@ export default function ProfilePage() {
                         profileImage: profilePictureUrl || '/api/placeholder/150/150'
                     })
                 } else {
+                    const fallbackUser = authUserRef.current
                     setUserData({
-                        name: authUser?.name || '',
-                        email: authUser?.email || '',
-                        phone: authUser?.phone_number || '',
-                        specialization: authUser?.specialization || '',
-                        role: authUser?.role || '',
-                        joinDate: authUser?.created_at || '',
-                        profileImage: authUser?.profile_picture_url || '/api/placeholder/150/150'
+                        name: fallbackUser?.name || '',
+                        email: fallbackUser?.email || '',
+                        phone: fallbackUser?.phone_number || '',
+                        specialization: fallbackUser?.specialization || '',
+                        role: fallbackUser?.role || '',
+                        joinDate: fallbackUser?.created_at || '',
+                        profileImage: fallbackUser?.profile_picture_url || '/api/placeholder/150/150'
                     })
                 }
             } catch (error) {
                 console.error('Failed to fetch user profile:', error)
+                const fallbackUser = authUserRef.current
                 setUserData({
-                    name: authUser?.name || 'Dr. Sarah Johnson',
-                    email: authUser?.email || 'sarah@smithclinic.com',
-                    phone: authUser?.phone_number || '+1 (555) 123-4567',
-                    specialization: authUser?.specialization || 'General Practitioner',
-                    role: authUser?.role || 'Lab Technician',
-                    joinDate: authUser?.created_at || '2023-01-15',
-                    profileImage: authUser?.profile_picture_url || '/api/placeholder/150/150'
+                    name: fallbackUser?.name || 'Dr. Sarah Johnson',
+                    email: fallbackUser?.email || 'sarah@smithclinic.com',
+                    phone: fallbackUser?.phone_number || '+1 (555) 123-4567',
+                    specialization: fallbackUser?.specialization || 'General Practitioner',
+                    role: fallbackUser?.role || 'Lab Technician',
+                    joinDate: fallbackUser?.created_at || '2023-01-15',
+                    profileImage: fallbackUser?.profile_picture_url || '/api/placeholder/150/150'
                 })
             } finally {
                 setLoading(false)
             }
         }
 
-        if (authUser) {
+        if (authUserId) {
             fetchUserProfile()
         } else {
             setLoading(false)
         }
-    }, [authUser])
+    }, [authUserId])
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
@@ -116,6 +125,7 @@ export default function ProfilePage() {
                 
                 if (response.data && response.data.user) {
                     const updatedUser = response.data.user
+                    const profilePictureUrl = response.data.profile_picture_url
                     setUserData({
                         name: updatedUser.name || userData.name,
                         email: updatedUser.email || userData.email,
@@ -123,8 +133,25 @@ export default function ProfilePage() {
                         specialization: updatedUser.specialization || userData.specialization,
                         role: updatedUser.role || userData.role,
                         joinDate: updatedUser.created_at || userData.joinDate,
-                        profileImage: response.data.profile_picture_url || userData.profileImage
+                        profileImage: profilePictureUrl || userData.profileImage
                     })
+
+                    // Update auth user + localStorage so Navbar avatar updates immediately.
+                    const userUpdates: Parameters<typeof updateUser>[0] = {
+                        name: updatedUser.name || userData.name,
+                        email: updatedUser.email || userData.email,
+                        phone_number: updatedUser.phone_number || userData.phone,
+                        specialization: updatedUser.specialization || userData.specialization,
+                        role: updatedUser.role || userData.role,
+                        created_at: updatedUser.created_at || userData.joinDate,
+                    }
+                    if (typeof profilePictureUrl === 'string' && profilePictureUrl.length > 0) {
+                        userUpdates.profile_picture_url = profilePictureUrl
+                    }
+                    updateUser(userUpdates)
+                } else if (response.data?.profile_picture_url) {
+                    // Best-effort: still update avatar URL if backend returned it.
+                    updateUser({ profile_picture_url: response.data.profile_picture_url })
                 }
             }
         } catch (error) {

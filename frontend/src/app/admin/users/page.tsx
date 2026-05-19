@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { useAuth, User } from '@/contexts/AuthContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
 import {
   Users,
@@ -13,7 +13,6 @@ import {
   ChevronUp,
   Check,
   AlertCircle,
-  X,
 } from 'lucide-react'
 
 const AVAILABLE_PERMISSIONS = [

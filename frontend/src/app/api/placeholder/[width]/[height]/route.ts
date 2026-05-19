@@ -2,12 +2,14 @@ export const dynamic = 'force-static'
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-export function GET(
+export async function GET(
   _request: Request,
-  { params }: { params: { width: string; height: string } },
+  { params }: { params: Promise<{ width: string; height: string }> },
 ) {
-  const widthRaw = Number.parseInt(params.width, 10)
-  const heightRaw = Number.parseInt(params.height, 10)
+  const { width: widthParam, height: heightParam } = await params
+
+  const widthRaw = Number.parseInt(widthParam, 10)
+  const heightRaw = Number.parseInt(heightParam, 10)
 
   const width = clamp(Number.isFinite(widthRaw) ? widthRaw : 150, 16, 2048)
   const height = clamp(Number.isFinite(heightRaw) ? heightRaw : 150, 16, 2048)

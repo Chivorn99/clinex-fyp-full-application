@@ -69,14 +69,14 @@ Route::middleware('auth:sanctum')->prefix('batches')->name('batches.')->group(fu
     Route::get('/{reportBatch}/status', [ReportBatchController::class, 'status'])->name('status');
     Route::get('/{reportBatch}/live-status', [ReportBatchController::class, 'liveStatus'])->name('live-status');
 
-    // NEW: Verification endpoints
+    // Verification endpoints
     Route::get('/{reportBatch}/reports-for-verification', [ReportBatchController::class, 'getReportsForVerification'])->name('reports-for-verification');
 
     // Duplicate filename check (pre-upload)
     Route::post('/check-duplicates', [ReportBatchController::class, 'checkDuplicates'])->name('check-duplicates');
 });
 
-// NEW: Global verification endpoint
+// Global verification endpoint
 Route::middleware('auth:sanctum')->get('/reports-for-verification', [ReportBatchController::class, 'getAllReportsForVerification'])->name('reports-for-verification');
 
 // Individual Lab Report Routes
@@ -101,9 +101,7 @@ Route::middleware('auth:sanctum')->prefix('patients')->name('patients.')->group(
     Route::get('/{patient}/lab-reports', [PatientController::class, 'labReports'])->name('lab-reports');
 });
 
-// ─── Admin Panel Routes ──────────────────────────────────────────
-// Each sub-group is gated by a specific RBAC permission.
-// Admin role auto-passes all permission checks.
+// Admin Panel Routes
 Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(function () {
     // Dashboard overview (requires view_analytics)
     Route::get('/dashboard', [App\Http\Controllers\AdminController::class, 'dashboard'])
@@ -140,7 +138,7 @@ Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(functi
         ->name('system-health');
 });
 
-// Health check route (optional but useful)
+// Health check route
 Route::get('/health', function () {
     return response()->json([
         'status' => 'ok',

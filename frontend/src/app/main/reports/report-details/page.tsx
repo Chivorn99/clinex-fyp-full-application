@@ -1,9 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Image from 'next/image'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { ArrowLeft, FileText, User, Calendar, Clock, Phone, CheckCircle, AlertTriangle, Download, Maximize, Minimize, FileDown } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { apiClient } from '@/lib/api'
 
@@ -68,7 +68,6 @@ export default function ReportDetailsPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const reportId = searchParams.get('id')
-    const { user } = useAuth()
     const toast = useToast()
 
     const [reportData, setReportData] = useState<ReportData | null>(null)
@@ -507,12 +506,18 @@ export default function ReportDetailsPage() {
                                         <div className="text-red-600">{pdfError}</div>
                                     </div>
                                 ) : (
-                                    <div className="border rounded-lg overflow-hidden" style={{ height: isPreviewExpanded ? '90vh' : '600px' }}>
+                                    <div
+                                        className="border rounded-lg overflow-hidden relative"
+                                        style={{ height: isPreviewExpanded ? '90vh' : '600px' }}
+                                    >
                                         {fileContentType.startsWith('image/') ? (
-                                            <img
+                                            <Image
                                                 src={pdfDataUrl}
                                                 alt="Lab Report Preview"
-                                                className="w-full h-full object-contain bg-gray-50"
+                                                fill
+                                                sizes="100vw"
+                                                unoptimized
+                                                className="object-contain bg-gray-50"
                                             />
                                         ) : (
                                             <iframe
