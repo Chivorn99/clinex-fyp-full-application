@@ -5,18 +5,16 @@
   --foreground: #171717;
 }
 
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
@@ -30,11 +28,99 @@ body {
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="submit"]):not([type="button"]),
 select,
 textarea {
-  color: #111827 !important;
+  color: var(--foreground) !important;
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #9ca3af !important;
-  opacity: 1 !important;
+  color: var(--foreground) !important;
+  opacity: 0.6 !important;
+}
+
+/* Dark mode: ensure form fields aren't bright white */
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="submit"]):not([type="button"]),
+.dark select,
+.dark textarea {
+  @apply bg-slate-900 border-slate-600;
+}
+
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="submit"]):not([type="button"]):disabled,
+.dark select:disabled,
+.dark textarea:disabled {
+  @apply bg-slate-950 border-slate-700;
+}
+
+/* ─── Dark mode bridge for existing light-tailwind UI ────────── */
+/* The UI currently hard-codes lots of light grays (bg-white,     */
+/* text-gray-900, etc.). These remaps make the app usable in      */
+/* dark mode without touching every page at once.                */
+
+.dark [class~="bg-gray-50"] {
+  @apply bg-slate-950;
+}
+
+.dark [class~="bg-gray-100"] {
+  @apply bg-slate-900;
+}
+
+.dark [class~="bg-white"]:not([class*="bg-opacity-"]) {
+  @apply bg-slate-900;
+}
+
+.dark [class~="text-gray-900"],
+.dark [class~="text-gray-800"] {
+  @apply text-slate-100;
+}
+
+.dark [class~="text-gray-700"] {
+  @apply text-slate-200;
+}
+
+.dark [class~="text-gray-600"] {
+  @apply text-slate-300;
+}
+
+.dark [class~="text-gray-500"],
+.dark [class~="text-gray-400"] {
+  @apply text-slate-400;
+}
+
+.dark [class~="border-gray-100"] {
+  @apply border-slate-800;
+}
+
+.dark [class~="border-gray-200"] {
+  @apply border-slate-700;
+}
+
+.dark [class~="border-gray-300"] {
+  @apply border-slate-600;
+}
+
+.dark [class~="divide-gray-200"] {
+  @apply divide-slate-700;
+}
+
+.dark [class*="hover:bg-gray-50"]:hover {
+  @apply bg-slate-800;
+}
+
+.dark [class*="hover:bg-gray-100"]:hover {
+  @apply bg-slate-800;
+}
+
+.dark [class*="hover:text-gray-600"]:hover {
+  @apply text-slate-200;
+}
+
+.dark [class*="hover:text-gray-700"]:hover {
+  @apply text-slate-100;
+}
+
+.dark .placeholder-gray-500::placeholder {
+  @apply text-slate-400;
+}
+
+.dark .placeholder-gray-400::placeholder {
+  @apply text-slate-500;
 }

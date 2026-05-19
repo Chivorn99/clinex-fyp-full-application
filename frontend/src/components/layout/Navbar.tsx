@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { Menu, X, User, LogOut, Shield, Upload, Layers, FileText, Users, BarChart3 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
+import ThemeToggle from '@/components/theme/ThemeToggle'
 
 const NAV_ITEMS = [
     { href: '/main/homepage', label: 'Dashboard', icon: null },
@@ -150,6 +151,8 @@ export default function Navbar() {
 
                     {/* Right side - Notifications and Profile */}
                     <div className="flex items-center">
+
+                        <ThemeToggle />
 
                         {/* Profile Dropdown */}
                         <div className="ml-3 relative">

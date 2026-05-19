@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api'
+import ThemeToggle from '@/components/theme/ThemeToggle'
 import {
   LayoutDashboard,
   Users,
@@ -215,6 +216,11 @@ export default function AdminSidebar() {
             </div>
           </div>
         )}
+
+        <div className={collapsed ? 'flex justify-center' : 'flex px-2'}>
+          <ThemeToggle className="text-slate-300 hover:text-white hover:bg-slate-700/50" />
+        </div>
+
         <Link
           href="/main/homepage"
           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-700/40 transition-all duration-200 ${
