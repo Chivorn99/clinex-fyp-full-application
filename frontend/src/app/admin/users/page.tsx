@@ -30,6 +30,8 @@ interface AdminUser {
   email: string
   role: string
   permissions: Record<string, boolean> | null
+  profile_pic?: string | null
+  profile_picture_url?: string | null
   phone_number?: string
   specialization?: string
   created_at: string
@@ -55,6 +57,10 @@ export default function UsersPage() {
   const [expandedUserId, setExpandedUserId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [avatarFailures, setAvatarFailures] = useState<Record<number, boolean>>({})
+
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+  const storageBaseUrl = apiBaseUrl.replace(/\/api\/?$/, '') + '/storage'
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message })
@@ -248,14 +254,33 @@ export default function UsersPage() {
             {users.map((u) => {
               const isExpanded = expandedUserId === u.id
               const isSelf = String(u.id) === String(currentUser?.id)
+              const avatarUrl =
+                (typeof u.profile_picture_url === 'string' && u.profile_picture_url.length > 0)
+                  ? u.profile_picture_url
+                  : (typeof u.profile_pic === 'string' && u.profile_pic.length > 0)
+                    ? `${storageBaseUrl}/${u.profile_pic}`
+                    : null
               return (
                 <div key={u.id} className="hover:bg-gray-50/50 transition-colors duration-150">
                   {/* User Row */}
                   <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       {/* Avatar */}
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                        {u.name?.charAt(0).toUpperCase()}
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0 overflow-hidden relative">
+                        <span className="relative z-0">{u.name?.charAt(0).toUpperCase()}</span>
+                        {avatarUrl && !avatarFailures[u.id] ? (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={avatarUrl}
+                              alt={u?.name ? `${u.name} profile picture` : 'Profile picture'}
+                              className="absolute inset-0 h-full w-full object-cover z-10"
+                              onError={() => {
+                                setAvatarFailures((prev) => ({ ...prev, [u.id]: true }))
+                              }}
+                            />
+                          </>
+                        ) : null}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">

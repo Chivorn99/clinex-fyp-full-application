@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { apiClient } from '@/lib/api'
 import {
   LayoutDashboard,
   Users,
@@ -13,7 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 interface NavItem {
   label: string
@@ -59,6 +60,50 @@ export default function AdminSidebar() {
   const pathname = usePathname()
   const { user, hasPermission } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarFailed, setAvatarFailed] = useState(false)
+
+  const userId = user?.id
+  const userProfilePictureUrl = user?.profile_picture_url
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadAvatar = async () => {
+      setAvatarFailed(false)
+
+      if (!userId) {
+        setAvatarUrl(null)
+        return
+      }
+
+      if (userProfilePictureUrl) {
+        setAvatarUrl(userProfilePictureUrl)
+        return
+      }
+
+      try {
+        const response = await apiClient.get('/profile')
+        const profileUser = (response as { data?: { user?: { profile_picture_url?: string | null } }; user?: { profile_picture_url?: string | null } })?.data?.user ??
+          (response as { user?: { profile_picture_url?: string | null } })?.user
+
+        const url = profileUser?.profile_picture_url
+        if (!cancelled) {
+          setAvatarUrl(url || null)
+        }
+      } catch {
+        if (!cancelled) {
+          setAvatarUrl(null)
+        }
+      }
+    }
+
+    loadAvatar()
+
+    return () => {
+      cancelled = true
+    }
+  }, [userId, userProfilePictureUrl])
 
   const filteredItems = navItems.filter(
     (item) => !item.permission || hasPermission(item.permission)
@@ -147,8 +192,22 @@ export default function AdminSidebar() {
       <div className="border-t border-slate-700/50 p-4 space-y-3">
         {!collapsed && user && (
           <div className="flex items-center gap-3 px-2">
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-              {user.name?.charAt(0).toUpperCase()}
+            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden relative">
+              <span className="relative z-0">{user.name?.charAt(0).toUpperCase()}</span>
+              {avatarUrl && !avatarFailed ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={avatarUrl}
+                    alt={user?.name ? `${user.name} profile picture` : 'Profile picture'}
+                    className="absolute inset-0 h-full w-full object-cover z-10"
+                    onError={() => {
+                      setAvatarFailed(true)
+                      setAvatarUrl(null)
+                    }}
+                  />
+                </>
+              ) : null}
             </div>
             <div className="min-w-0">
               <p className="text-sm text-white font-medium truncate">{user.name}</p>
