@@ -393,7 +393,7 @@ export default function VerificationPage() {
                                                         <tr key={report.id} className="hover:bg-gray-50">
                                                             <td className="px-6 py-4 whitespace-nowrap">
                                                                 <div className="flex items-center">
-                                                                    <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mr-3" />
+                                                                    <CheckCircle className="h-5 w-5 text-green-500 shrink-0 mr-3" />
                                                                     <div className="min-w-0 flex-1">
                                                                         <p className="text-sm font-medium text-gray-900 truncate">
                                                                             {report.original_filename}

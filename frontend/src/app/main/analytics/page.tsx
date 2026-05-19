@@ -350,7 +350,7 @@ export default function AnalyticsPage() {
                     <>
                         {/* Overview Stats */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+                            <div className="bg-linear-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-blue-100 text-sm font-medium">Total Patients</p>
@@ -364,7 +364,7 @@ export default function AnalyticsPage() {
                                 </div>
                             </div>
 
-                            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
+                            <div className="bg-linear-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-green-100 text-sm font-medium">Total Reports</p>
@@ -378,7 +378,7 @@ export default function AnalyticsPage() {
                                 </div>
                             </div>
 
-                            <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
+                            <div className="bg-linear-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-purple-100 text-sm font-medium">Verified Reports</p>
@@ -395,7 +395,7 @@ export default function AnalyticsPage() {
                                 </div>
                             </div>
 
-                            <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
+                            <div className="bg-linear-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-orange-100 text-sm font-medium">Success Rate</p>
@@ -496,7 +496,7 @@ export default function AnalyticsPage() {
                                                     <div className="flex-1">
                                                         <div className="bg-gray-200 rounded-full h-2">
                                                             <div 
-                                                                className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                                                                className="bg-linear-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
                                                                 style={{ width: `${percentage}%` }}
                                                             ></div>
                                                         </div>
@@ -568,9 +568,9 @@ export default function AnalyticsPage() {
                                 <div className="p-6">
                                     <div className="space-y-3">
                                         {analyticsData.userActivity.slice(0, 6).map((user) => (
-                                            <div key={user.userId} className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
+                                            <div key={user.userId} className="flex items-center justify-between p-3 bg-linear-to-r from-blue-50 to-purple-50 rounded-lg">
                                                 <div className="flex items-center space-x-3">
-                                                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                                                    <div className="w-8 h-8 bg-linear-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
                                                         {user.userName.charAt(0)}
                                                     </div>
                                                     <div>
@@ -594,7 +594,7 @@ export default function AnalyticsPage() {
                         </div>
 
                         {/* Performance Metrics */}
-                        <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-xl shadow-lg p-8 text-white">
+                        <div className="bg-linear-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-xl shadow-lg p-8 text-white">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                                 <div className="text-center">
                                     <div className="bg-white bg-opacity-20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">

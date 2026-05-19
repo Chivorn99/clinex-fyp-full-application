@@ -76,13 +76,13 @@ function ToastItem({ id, message, type, duration = 5000 }: {
             `}
         >
             <div className="flex items-start gap-3 p-4">
-                <Icon className={`h-5 w-5 flex-shrink-0 mt-0.5 ${config.text}`} />
+                <Icon className={`h-5 w-5 shrink-0 mt-0.5 ${config.text}`} />
                 <p className={`text-sm font-medium flex-1 ${config.text}`}>
                     {message}
                 </p>
                 <button
                     onClick={handleDismiss}
-                    className={`flex-shrink-0 ${config.text} opacity-60 hover:opacity-100 transition-opacity`}
+                    className={`shrink-0 ${config.text} opacity-60 hover:opacity-100 transition-opacity`}
                 >
                     <X className="h-4 w-4" />
                 </button>
@@ -116,7 +116,7 @@ export default function ToastContainer() {
                     to { width: 0%; }
                 }
             `}</style>
-            <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none">
+            <div className="fixed bottom-4 right-4 z-9999 flex flex-col gap-3 pointer-events-none">
                 {toasts.map(toast => (
                     <ToastItem
                         key={toast.id}

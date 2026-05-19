@@ -14,13 +14,13 @@ export default function SplashPage() {
   }, [router])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
       <div className="text-center">
         {/* Animated Logo */}
         <div className="relative mb-8">
           <div className="absolute inset-0 w-32 h-32 border-4 border-blue-200 rounded-full animate-spin"></div>
           <div className="absolute inset-2 w-28 h-28 border-4 border-green-200 rounded-full animate-reverse-spin"></div>
-          <div className="relative w-32 h-32 bg-gradient-to-br from-blue-600 to-green-600 rounded-full flex items-center justify-center animate-pulse shadow-2xl">
+          <div className="relative w-32 h-32 bg-linear-to-br from-blue-600 to-green-600 rounded-full flex items-center justify-center animate-pulse shadow-2xl">
             <span className="text-4xl font-bold text-white animate-bounce">C</span>
           </div>
 
@@ -33,7 +33,7 @@ export default function SplashPage() {
 
         {/* Animated Title */}
         <div className="mb-4">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent animate-fade-in">
+          <h1 className="text-4xl font-bold bg-linear-to-r from-blue-600 to-green-600 bg-clip-text text-transparent animate-fade-in">
             Clinex
           </h1>
           <p className="text-lg text-gray-600 mt-2 animate-fade-in-delay">
@@ -43,7 +43,7 @@ export default function SplashPage() {
 
         <div className="w-64 mx-auto mb-6">
           <div className="w-full bg-gray-200 rounded-full h-1">
-            <div className="bg-gradient-to-r from-blue-600 to-green-600 h-1 rounded-full animate-loading-bar"></div>
+            <div className="bg-linear-to-r from-blue-600 to-green-600 h-1 rounded-full animate-loading-bar"></div>
           </div>
         </div>
 

@@ -956,7 +956,7 @@ export default function VerificationPage() {
         {batchInfo && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-center space-x-4">
-              <div className="flex-shrink-0">
+              <div className="shrink-0">
                 <FileText className="h-8 w-8 text-blue-600" />
               </div>
               <div className="flex-1">
@@ -967,7 +967,7 @@ export default function VerificationPage() {
                   Verifying {reports.length} reports from this batch
                 </p>
               </div>
-              <div className="flex-shrink-0">
+              <div className="shrink-0">
                 <span
                   className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
                     batchInfo.status === "completed"
@@ -1044,7 +1044,7 @@ export default function VerificationPage() {
                     </div>
                   ) : (
                     <div
-                      className={`${isPreviewExpanded ? "h-[800px]" : "h-[700px]"} transition-all duration-300`}
+                      className={`${isPreviewExpanded ? "h-200" : "h-175"} transition-all duration-300`}
                     >
                       {fileContentType.startsWith("image/") ? (
                         <div className="relative w-full h-full rounded-md border border-gray-200 shadow-sm bg-gray-50 overflow-hidden">
@@ -1180,7 +1180,7 @@ export default function VerificationPage() {
                   </div>
                   <div className="p-6">
                     {selectedReport.rawOcrText ? (
-                      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-gray-800 bg-gray-50 border border-gray-200 rounded-md p-4 font-mono">
+                      <pre className="max-h-96 overflow-auto whitespace-pre-wrap wrap-break-word text-xs leading-5 text-gray-800 bg-gray-50 border border-gray-200 rounded-md p-4 font-mono">
                         {selectedReport.rawOcrText}
                       </pre>
                     ) : (
@@ -1371,7 +1371,7 @@ export default function VerificationPage() {
                   Reports ({reports.length})
                 </h3>
               </div>
-              <div className="p-4 space-y-3 max-h-[700px] overflow-y-auto">
+              <div className="p-4 space-y-3 max-h-175 overflow-y-auto">
                 {reports.map((report) => (
                   <div
                     key={report.id}
@@ -1390,7 +1390,7 @@ export default function VerificationPage() {
                     }`}
                   >
                     <div className="flex items-center space-x-2">
-                      <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                      <FileText className="h-4 w-4 text-gray-400 shrink-0" />
                       <span className="text-sm font-medium text-gray-900 truncate">
                         {report.fileName}
                       </span>
@@ -1453,7 +1453,7 @@ export default function VerificationPage() {
               ></span>
               <div className="relative inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
                 <div className="sm:flex sm:items-start">
-                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                  <div className="mx-auto shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
                     <Plus
                       className="h-6 w-6 text-blue-600"
                       aria-hidden="true"

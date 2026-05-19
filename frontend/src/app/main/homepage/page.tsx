@@ -226,7 +226,7 @@ export default function HomePage() {
                             Array.from({ length: 4 }).map((_, index) => (
                                 <div key={index} className="bg-white shadow rounded-lg p-6 animate-pulse">
                                     <div className="flex items-center">
-                                        <div className="flex-shrink-0">
+                                        <div className="shrink-0">
                                             <div className="h-12 w-12 rounded-md bg-gray-200"></div>
                                         </div>
                                         <div className="ml-4 flex-1">
@@ -242,7 +242,7 @@ export default function HomePage() {
                                 return (
                                     <div key={stat.name} className="bg-white shadow rounded-lg p-6 hover:shadow-md transition-shadow">
                                         <div className="flex items-center">
-                                            <div className="flex-shrink-0">
+                                            <div className="shrink-0">
                                                 <div className="flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
                                                     <Icon className="h-6 w-6" />
                                                 </div>
@@ -391,7 +391,7 @@ export default function HomePage() {
 
             {/* Recent Reports Modal */}
             {showRecentReports && (
-                <div className="fixed inset-0 z-[9999] overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+                <div className="fixed inset-0 z-9999 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
                     <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                         <div
                             className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
@@ -427,7 +427,7 @@ export default function HomePage() {
                                                 className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                                             >
                                                 <div className="flex items-center space-x-3">
-                                                    <div className="flex-shrink-0">
+                                                    <div className="shrink-0">
                                                         <FileText className="h-5 w-5 text-gray-400" />
                                                     </div>
                                                     <div className="min-w-0 flex-1">
@@ -442,7 +442,7 @@ export default function HomePage() {
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center space-x-2 flex-shrink-0">
+                                                <div className="flex items-center space-x-2 shrink-0">
                                                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                                         report.status === 'verified' ? 'bg-green-100 text-green-800' :
                                                         report.status === 'processed' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'

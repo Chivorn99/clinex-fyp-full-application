@@ -106,7 +106,7 @@ export default function Navbar() {
                     {/* Logo and Main Navigation */}
                     <div className="flex">
                         {/* Logo */}
-                        <div className="flex-shrink-0 flex items-center">
+                        <div className="shrink-0 flex items-center">
                             <Link href="/main/homepage" className="flex items-center">
                                 <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
                                     <span className="text-white font-bold text-lg">C</span>

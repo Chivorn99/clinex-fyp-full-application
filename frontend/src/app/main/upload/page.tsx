@@ -465,7 +465,7 @@ export default function UploadPage() {
                         </div>
                         <div className="p-6">
                             {selectedFilePreview && previewUrl ? (
-                                <div className="aspect-[3/4] bg-gray-100 rounded-lg border-2 border-gray-300 overflow-hidden">
+                                <div className="aspect-3/4 bg-gray-100 rounded-lg border-2 border-gray-300 overflow-hidden">
                                     {previewType === 'pdf' ? (
                                         <iframe
                                             src={previewUrl}
@@ -485,7 +485,7 @@ export default function UploadPage() {
                                 </div>
                             ) : (
                                 <div
-                                    className={`aspect-[3/4] border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors ${isDragOver
+                                    className={`aspect-3/4 border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors ${isDragOver
                                         ? 'border-blue-400 bg-blue-50'
                                         : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
                                         }`}
@@ -565,7 +565,7 @@ export default function UploadPage() {
                                             <div className="flex items-center justify-between">
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center space-x-2">
-                                                        <FileText className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                                                        <FileText className="h-5 w-5 text-gray-400 shrink-0" />
                                                         <button
                                                             onClick={() => handleFilePreview(file.id)}
                                                             className="text-sm font-medium truncate text-blue-600 hover:text-blue-800 cursor-pointer"
@@ -675,7 +675,7 @@ export default function UploadPage() {
                     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
                         <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
                             <div className="flex items-center mb-4">
-                                <AlertTriangle className="h-6 w-6 text-yellow-500 mr-3 flex-shrink-0" />
+                                <AlertTriangle className="h-6 w-6 text-yellow-500 mr-3 shrink-0" />
                                 <h3 className="text-lg font-semibold text-gray-900">
                                     Duplicate Files Detected
                                 </h3>
@@ -686,7 +686,7 @@ export default function UploadPage() {
                             <ul className="bg-yellow-50 rounded-md p-3 mb-4 max-h-40 overflow-y-auto">
                                 {duplicateWarning.unverified.map((d, i) => (
                                     <li key={i} className="text-sm text-yellow-800 flex items-center py-1">
-                                        <FileText className="h-4 w-4 mr-2 flex-shrink-0" />
+                                        <FileText className="h-4 w-4 mr-2 shrink-0" />
                                         {d.filename} <span className="ml-auto text-xs text-yellow-600">({d.status})</span>
                                     </li>
                                 ))}

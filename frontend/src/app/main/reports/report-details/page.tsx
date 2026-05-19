@@ -546,7 +546,7 @@ export default function ReportDetailsPage() {
                         {(reportMetadata.status === 'processing' || reportMetadata.status === 'processed') && (
                             <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-md">
                                 <div className="flex">
-                                    <div className="flex-shrink-0">
+                                    <div className="shrink-0">
                                         <AlertTriangle className="h-5 w-5 text-blue-400" />
                                     </div>
                                     <div className="ml-3">
