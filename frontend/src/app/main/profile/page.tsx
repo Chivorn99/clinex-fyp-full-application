@@ -29,8 +29,11 @@ export default function ProfilePage() {
             try {
                 setLoading(true)
                 const response = await apiClient.get('/profile')
-                if (response.success && response.data && response.data.user) {
-                    const user = response.data.user
+                const user = response?.data?.user ?? response?.user
+                const profilePictureUrl =
+                    user?.profile_picture_url ?? response?.data?.profile_picture_url
+
+                if (response.success && user) {
 
                     setUserData({
                         name: user.name || '',
@@ -39,7 +42,7 @@ export default function ProfilePage() {
                         specialization: user.specialization || '',
                         role: user.role || '',
                         joinDate: user.created_at || '',
-                        profileImage: response.data.profile_picture_url || '/api/placeholder/150/150'
+                        profileImage: profilePictureUrl || '/api/placeholder/150/150'
                     })
                 } else {
                     setUserData({

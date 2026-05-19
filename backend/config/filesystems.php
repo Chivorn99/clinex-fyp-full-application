@@ -33,7 +33,10 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Disable auto-serving for the private disk.
+            // When enabled, Laravel registers a /storage/{path} route that requires
+            // signed URLs for non-public disks, which conflicts with public asset URLs.
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],
@@ -47,6 +50,9 @@ return [
             'root' => storage_path('app/public'),
             'url' => env('APP_URL') . '/storage',
             'visibility' => 'public',
+            // Serve public files (e.g., profile pictures) via /storage/{path}.
+            // Public visibility means no signed URL is required.
+            'serve' => true,
             'throw' => false,
             'report' => false,
         ],
