@@ -1,53 +1,58 @@
-'use client'
-import { useState } from 'react'
-import Link from 'next/link'
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { useAuth } from '@/contexts/AuthContext'
-import { apiClient } from '@/lib/api'
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import { Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import { apiClient } from "@/lib/api";
 
 const getErrorMessage = (err: unknown, fallback: string) => {
-  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
-    return (err as { message: string }).message
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof (err as { message?: unknown }).message === "string"
+  ) {
+    return (err as { message: string }).message;
   }
-  return fallback
-}
+  return fallback;
+};
 
 export default function LoginPage() {
-  const router = useRouter()
-  const { login } = useAuth()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
+  const router = useRouter();
+  const { login } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError('')
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
     try {
-      const response = await apiClient.post('/login', {
+      const response = await apiClient.post("/login", {
         email,
         password,
-      })
+      });
 
       // Handle both token formats (access_token from Laravel Sanctum)
-      const token = response.access_token || response.token
-      
+      const token = response.access_token || response.token;
+
       if (token && response.user) {
-        login(token, response.user)
-        router.push("/main/homepage")
+        login(token, response.user);
+        router.push("/main/homepage");
       } else {
-        setError('Invalid response from server. Missing token or user data.')
+        setError("Invalid response from server. Missing token or user data.");
       }
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Login failed. Please try again.'))
+      setError(getErrorMessage(err, "Login failed. Please try again."));
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 sm:px-6 lg:px-8">
@@ -74,7 +79,10 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-800 mb-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-800 mb-2"
+              >
                 Email address
               </label>
               <div className="relative">
@@ -96,7 +104,10 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-800 mb-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-800 mb-2"
+              >
                 Password
               </label>
               <div className="relative">
@@ -106,7 +117,7 @@ export default function LoginPage() {
                 <input
                   id="password"
                   name="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required
                   value={password}
@@ -148,12 +159,12 @@ export default function LoginPage() {
                   Signing in...
                 </div>
               ) : (
-                'Sign in'
+                "Sign in"
               )}
             </button>
           </form>
         </div>
       </div>
     </div>
-  )
+  );
 }

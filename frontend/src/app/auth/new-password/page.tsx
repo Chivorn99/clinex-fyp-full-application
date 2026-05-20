@@ -1,78 +1,85 @@
-'use client'
-import { useEffect, useState } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Lock, Eye, EyeOff, CheckCircle } from 'lucide-react'
-import { apiClient } from '@/lib/api'
+"use client";
+import { useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { Lock, Eye, EyeOff, CheckCircle } from "lucide-react";
+import { apiClient } from "@/lib/api";
 
 const getErrorMessage = (err: unknown, fallback: string) => {
-  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
-    return (err as { message: string }).message
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof (err as { message?: unknown }).message === "string"
+  ) {
+    return (err as { message: string }).message;
   }
-  return fallback
-}
+  return fallback;
+};
 
 export default function NewPasswordPage() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const email = searchParams.get('email') || ''
-  const code = searchParams.get('code') || ''
-  
-  const [password, setPassword] = useState('')
-  const [passwordConfirmation, setPasswordConfirmation] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const email = searchParams.get("email") || "";
+  const code = searchParams.get("code") || "";
+
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     if (!email || !code) {
-      router.replace('/auth/reset-password')
+      router.replace("/auth/reset-password");
     }
-  }, [email, code, router])
+  }, [email, code, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+    e.preventDefault();
+
     if (password !== passwordConfirmation) {
-      setError('Passwords do not match')
-      return
+      setError("Passwords do not match");
+      return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long')
-      return
+      setError("Password must be at least 8 characters long");
+      return;
     }
 
-    setIsLoading(true)
-    setError('')
+    setIsLoading(true);
+    setError("");
 
     try {
-      const response = await apiClient.post('/password/otp-verify', {
+      const response = await apiClient.post("/password/otp-verify", {
         email,
         code,
         password,
         password_confirmation: passwordConfirmation,
-      })
+      });
 
       if (response.success) {
-        setSuccess(true)
+        setSuccess(true);
         setTimeout(() => {
-          router.push('/auth/login')
-        }, 3000)
+          router.push("/auth/login");
+        }, 3000);
       } else {
-        setError(response.message || 'Failed to reset password')
+        setError(response.message || "Failed to reset password");
       }
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Failed to reset password. Please try again.'))
+      setError(
+        getErrorMessage(err, "Failed to reset password. Please try again."),
+      );
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   if (!email || !code) {
-    return null
+    return null;
   }
 
   if (success) {
@@ -95,7 +102,7 @@ export default function NewPasswordPage() {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -109,7 +116,8 @@ export default function NewPasswordPage() {
             Create New Password
           </h2>
           <p className="text-gray-600">
-            Enter your new password for <span className="font-medium">{email}</span>
+            Enter your new password for{" "}
+            <span className="font-medium">{email}</span>
           </p>
         </div>
 
@@ -122,7 +130,10 @@ export default function NewPasswordPage() {
             )}
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-800 mb-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-800 mb-2"
+              >
                 New Password
               </label>
               <div className="relative">
@@ -132,7 +143,7 @@ export default function NewPasswordPage() {
                 <input
                   id="password"
                   name="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   required
                   minLength={8}
                   value={password}
@@ -155,7 +166,10 @@ export default function NewPasswordPage() {
             </div>
 
             <div>
-              <label htmlFor="password_confirmation" className="block text-sm font-medium text-gray-800 mb-2">
+              <label
+                htmlFor="password_confirmation"
+                className="block text-sm font-medium text-gray-800 mb-2"
+              >
                 Confirm New Password
               </label>
               <div className="relative">
@@ -165,7 +179,7 @@ export default function NewPasswordPage() {
                 <input
                   id="password_confirmation"
                   name="password_confirmation"
-                  type={showConfirmPassword ? 'text' : 'password'}
+                  type={showConfirmPassword ? "text" : "password"}
                   required
                   minLength={8}
                   value={passwordConfirmation}
@@ -191,12 +205,20 @@ export default function NewPasswordPage() {
             <div className="text-sm text-gray-600">
               <p className="font-medium mb-1">Password requirements:</p>
               <ul className="space-y-1">
-                <li className={`flex items-center ${password.length >= 8 ? 'text-green-600' : 'text-gray-500'}`}>
-                  <span className="mr-2">{password.length >= 8 ? '✓' : '○'}</span>
+                <li
+                  className={`flex items-center ${password.length >= 8 ? "text-green-600" : "text-gray-500"}`}
+                >
+                  <span className="mr-2">
+                    {password.length >= 8 ? "✓" : "○"}
+                  </span>
                   At least 8 characters
                 </li>
-                <li className={`flex items-center ${password === passwordConfirmation && password ? 'text-green-600' : 'text-gray-500'}`}>
-                  <span className="mr-2">{password === passwordConfirmation && password ? '✓' : '○'}</span>
+                <li
+                  className={`flex items-center ${password === passwordConfirmation && password ? "text-green-600" : "text-gray-500"}`}
+                >
+                  <span className="mr-2">
+                    {password === passwordConfirmation && password ? "✓" : "○"}
+                  </span>
                   Passwords match
                 </li>
               </ul>
@@ -204,7 +226,11 @@ export default function NewPasswordPage() {
 
             <button
               type="submit"
-              disabled={isLoading || password.length < 8 || password !== passwordConfirmation}
+              disabled={
+                isLoading ||
+                password.length < 8 ||
+                password !== passwordConfirmation
+              }
               className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
             >
               {isLoading ? (
@@ -213,7 +239,7 @@ export default function NewPasswordPage() {
                   Updating Password...
                 </div>
               ) : (
-                'Update Password'
+                "Update Password"
               )}
             </button>
           </form>
@@ -229,5 +255,5 @@ export default function NewPasswordPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

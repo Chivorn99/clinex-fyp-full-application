@@ -1,48 +1,53 @@
-'use client'
-import { useState } from 'react'
-import Link from 'next/link'
-import { Mail, ArrowLeft, Send } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { apiClient } from '@/lib/api'
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import { Mail, ArrowLeft, Send } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { apiClient } from "@/lib/api";
 
 const getErrorMessage = (err: unknown, fallback: string) => {
-  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
-    return (err as { message: string }).message
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof (err as { message?: unknown }).message === "string"
+  ) {
+    return (err as { message: string }).message;
   }
-  return fallback
-}
+  return fallback;
+};
 
 export default function ResetPasswordPage() {
-  const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError('')
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
     try {
-      const response = await apiClient.post('/password/otp-request', {
+      const response = await apiClient.post("/password/otp-request", {
         email,
-      })
+      });
 
       if (response.success) {
-        setSuccess(true)
+        setSuccess(true);
         setTimeout(() => {
-          router.push(`/auth/verify-otp?email=${encodeURIComponent(email)}`)
-        }, 2000)
+          router.push(`/auth/verify-otp?email=${encodeURIComponent(email)}`);
+        }, 2000);
       } else {
-        setError(response.message || 'Failed to send OTP')
+        setError(response.message || "Failed to send OTP");
       }
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Failed to send OTP. Please try again.'))
+      setError(getErrorMessage(err, "Failed to send OTP. Please try again."));
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   if (success) {
     return (
@@ -65,7 +70,7 @@ export default function ResetPasswordPage() {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -92,7 +97,10 @@ export default function ResetPasswordPage() {
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-800 mb-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-800 mb-2"
+              >
                 Email address
               </label>
               <div className="relative">
@@ -124,7 +132,7 @@ export default function ResetPasswordPage() {
                   Sending...
                 </div>
               ) : (
-                'Send Verification Code'
+                "Send Verification Code"
               )}
             </button>
           </form>
@@ -141,5 +149,5 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

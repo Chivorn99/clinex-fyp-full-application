@@ -38,6 +38,7 @@ Thumbs.db
 /scripts/python/.pytest_cache
 /scripts/python/.mypy_cache
 /scripts/test_file/
+/scripts/test_this_file/
 
 Homestead.json
 Homestead.yaml

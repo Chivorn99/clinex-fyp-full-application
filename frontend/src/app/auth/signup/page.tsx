@@ -1,31 +1,45 @@
-'use client'
-import { useState } from 'react'
-import Link from 'next/link'
-import { Eye, EyeOff, Mail, Lock, User, Building2, Check, X } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { apiClient } from '@/lib/api'
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import {
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+  User,
+  Building2,
+  Check,
+  X,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { apiClient } from "@/lib/api";
 
 const getErrorMessage = (err: unknown, fallback: string) => {
-  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
-    return (err as { message: string }).message
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof (err as { message?: unknown }).message === "string"
+  ) {
+    return (err as { message: string }).message;
   }
-  return fallback
-}
+  return fallback;
+};
 
 export default function SignUpPage() {
-  const router = useRouter()
+  const router = useRouter();
   const [formData, setFormData] = useState({
-    fullName: '',
-    clinicName: '',
-    email: '',
-    password: '',
-    role: 'lab_technician',
-  })
-  const [showPassword, setShowPassword] = useState(false)
-  const [agreedToTerms, setAgreedToTerms] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+    fullName: "",
+    clinicName: "",
+    email: "",
+    password: "",
+    role: "lab_technician",
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   // Password strength validation
   const passwordStrength = {
@@ -34,46 +48,46 @@ export default function SignUpPage() {
     hasLowercase: /[a-z]/.test(formData.password),
     hasNumber: /\d/.test(formData.password),
     hasSpecialChar: /[!@#$%^&*(),.?":{}|<>]/.test(formData.password),
-  }
+  };
 
-  const isPasswordStrong = Object.values(passwordStrength).every(Boolean)
+  const isPasswordStrong = Object.values(passwordStrength).every(Boolean);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
-  }
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!agreedToTerms || !isPasswordStrong) return
-    
-    setIsLoading(true)
-    setError('')
-    setSuccess('')
+    e.preventDefault();
+    if (!agreedToTerms || !isPasswordStrong) return;
+
+    setIsLoading(true);
+    setError("");
+    setSuccess("");
 
     try {
-      await apiClient.post('/register', {
+      await apiClient.post("/register", {
         name: formData.fullName,
         email: formData.email,
         password: formData.password,
         password_confirmation: formData.password,
         role: formData.role,
-      })
+      });
 
-      setSuccess('Account created successfully! Redirecting to login...')
-      
+      setSuccess("Account created successfully! Redirecting to login...");
+
       setTimeout(() => {
-        router.push('/auth/login')
-      }, 2000)
-
+        router.push("/auth/login");
+      }, 2000);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Registration failed. Please try again.'))
+      setError(getErrorMessage(err, "Registration failed. Please try again."));
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
-  const isFormValid = formData.fullName && formData.email && isPasswordStrong && agreedToTerms
+  const isFormValid =
+    formData.fullName && formData.email && isPasswordStrong && agreedToTerms;
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
@@ -109,7 +123,10 @@ export default function SignUpPage() {
 
             {/* Full Name Field */}
             <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="fullName"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Full Name
               </label>
               <div className="relative">
@@ -131,7 +148,10 @@ export default function SignUpPage() {
 
             {/* Clinic Name Field */}
             <div>
-              <label htmlFor="clinicName" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="clinicName"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Clinic Name
               </label>
               <div className="relative">
@@ -153,7 +173,10 @@ export default function SignUpPage() {
 
             {/* Work Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Work Email
               </label>
               <div className="relative">
@@ -176,7 +199,10 @@ export default function SignUpPage() {
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Password
               </label>
               <div className="relative">
@@ -186,7 +212,7 @@ export default function SignUpPage() {
                 <input
                   id="password"
                   name="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
                   required
                   value={formData.password}
@@ -210,21 +236,28 @@ export default function SignUpPage() {
               {/* Password Strength Indicators */}
               {formData.password && (
                 <div className="mt-3 space-y-1">
-                  <div className="text-xs text-gray-600 mb-2">Password requirements:</div>
+                  <div className="text-xs text-gray-600 mb-2">
+                    Password requirements:
+                  </div>
                   {Object.entries({
-                    'At least 8 characters': passwordStrength.minLength,
-                    'One uppercase letter': passwordStrength.hasUppercase,
-                    'One lowercase letter': passwordStrength.hasLowercase,
-                    'One number': passwordStrength.hasNumber,
-                    'One special character': passwordStrength.hasSpecialChar,
+                    "At least 8 characters": passwordStrength.minLength,
+                    "One uppercase letter": passwordStrength.hasUppercase,
+                    "One lowercase letter": passwordStrength.hasLowercase,
+                    "One number": passwordStrength.hasNumber,
+                    "One special character": passwordStrength.hasSpecialChar,
                   }).map(([requirement, met]) => (
-                    <div key={requirement} className="flex items-center text-xs">
+                    <div
+                      key={requirement}
+                      className="flex items-center text-xs"
+                    >
                       {met ? (
                         <Check className="h-3 w-3 text-green-500 mr-2" />
                       ) : (
                         <X className="h-3 w-3 text-gray-400 mr-2" />
                       )}
-                      <span className={met ? 'text-green-600' : 'text-gray-500'}>
+                      <span
+                        className={met ? "text-green-600" : "text-gray-500"}
+                      >
                         {requirement}
                       </span>
                     </div>
@@ -245,12 +278,18 @@ export default function SignUpPage() {
               />
               <div className="ml-3 text-sm">
                 <label htmlFor="agree-terms" className="text-gray-700">
-                  I agree to the{' '}
-                  <Link href="/terms" className="text-green-600 hover:text-green-500 font-medium">
+                  I agree to the{" "}
+                  <Link
+                    href="/terms"
+                    className="text-green-600 hover:text-green-500 font-medium"
+                  >
                     Terms of Service
-                  </Link>{' '}
-                  and{' '}
-                  <Link href="/privacy" className="text-green-600 hover:text-green-500 font-medium">
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    href="/privacy"
+                    className="text-green-600 hover:text-green-500 font-medium"
+                  >
                     Privacy Policy
                   </Link>
                 </label>
@@ -269,7 +308,7 @@ export default function SignUpPage() {
                   Creating account...
                 </div>
               ) : (
-                'Create Account'
+                "Create Account"
               )}
             </button>
           </form>
@@ -278,7 +317,7 @@ export default function SignUpPage() {
         {/* Sign In Link */}
         <div className="text-center">
           <p className="text-sm text-gray-600">
-            Already have an account?{' '}
+            Already have an account?{" "}
             <Link
               href="/auth/login"
               className="font-medium text-green-600 hover:text-green-500"
@@ -289,5 +328,5 @@ export default function SignUpPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

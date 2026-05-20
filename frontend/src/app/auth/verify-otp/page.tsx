@@ -1,137 +1,144 @@
-'use client'
-import { useState, useEffect, useRef } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Mail, ArrowLeft, RefreshCw } from 'lucide-react'
-import { apiClient } from '@/lib/api'
+"use client";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { Mail, ArrowLeft, RefreshCw } from "lucide-react";
+import { apiClient } from "@/lib/api";
 
 const getErrorMessage = (err: unknown, fallback: string) => {
-  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
-    return (err as { message: string }).message
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof (err as { message?: unknown }).message === "string"
+  ) {
+    return (err as { message: string }).message;
   }
-  return fallback
-}
+  return fallback;
+};
 
 export default function VerifyOTPPage() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const email = searchParams.get('email') || ''
-  
-  const [otp, setOtp] = useState(['', '', '', '', '', ''])
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [timeLeft, setTimeLeft] = useState(600)
-  const [canResend, setCanResend] = useState(false)
-  const [isResending, setIsResending] = useState(false)
-  
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const email = searchParams.get("email") || "";
+
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [timeLeft, setTimeLeft] = useState(600);
+  const [canResend, setCanResend] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft((prevTime) => {
         if (prevTime <= 1) {
-          setCanResend(true)
-          return 0
+          setCanResend(true);
+          return 0;
         }
-        return prevTime - 1
-      })
-    }, 1000)
+        return prevTime - 1;
+      });
+    }, 1000);
 
-    return () => clearInterval(timer)
-  }, [])
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!email) {
-      router.replace('/auth/reset-password')
+      router.replace("/auth/reset-password");
     }
-  }, [email, router])
+  }, [email, router]);
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
 
   const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) return
-    
-    const newOtp = [...otp]
-    newOtp[index] = value
-    setOtp(newOtp)
+    if (value.length > 1) return;
+
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
 
     if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus()
+      inputRefs.current[index + 1]?.focus();
     }
 
-    if (value && index === 5 && newOtp.every(digit => digit !== '')) {
-      handleSubmit(newOtp.join(''))
+    if (value && index === 5 && newOtp.every((digit) => digit !== "")) {
+      handleSubmit(newOtp.join(""));
     }
-  }
+  };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus()
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
     }
-  }
+  };
 
   const handleSubmit = async (otpCode?: string) => {
-    const code = otpCode || otp.join('')
+    const code = otpCode || otp.join("");
     if (code.length !== 6) {
-      setError('Please enter all 6 digits')
-      return
+      setError("Please enter all 6 digits");
+      return;
     }
 
-    setIsLoading(true)
-    setError('')
+    setIsLoading(true);
+    setError("");
 
     try {
-      const response = await apiClient.post('/password/otp-verify-only', {
+      const response = await apiClient.post("/password/otp-verify-only", {
         email,
         code,
-      })
+      });
 
       if (response.success) {
-        router.push(`/auth/new-password?email=${encodeURIComponent(email)}&code=${code}`)
+        router.push(
+          `/auth/new-password?email=${encodeURIComponent(email)}&code=${code}`,
+        );
       } else {
-        setError(response.message || 'Invalid OTP code')
-        setOtp(['', '', '', '', '', ''])
-        inputRefs.current[0]?.focus()
+        setError(response.message || "Invalid OTP code");
+        setOtp(["", "", "", "", "", ""]);
+        inputRefs.current[0]?.focus();
       }
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Invalid OTP code. Please try again.'))
-      setOtp(['', '', '', '', '', ''])
-      inputRefs.current[0]?.focus()
+      setError(getErrorMessage(err, "Invalid OTP code. Please try again."));
+      setOtp(["", "", "", "", "", ""]);
+      inputRefs.current[0]?.focus();
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleResendOtp = async () => {
-    setIsResending(true)
-    setError('')
+    setIsResending(true);
+    setError("");
 
     try {
-      const response = await apiClient.post('/password/otp-request', {
+      const response = await apiClient.post("/password/otp-request", {
         email,
-      })
+      });
 
       if (response.success) {
-        setTimeLeft(600)
-        setCanResend(false)
-        setOtp(['', '', '', '', '', ''])
-        inputRefs.current[0]?.focus()
+        setTimeLeft(600);
+        setCanResend(false);
+        setOtp(["", "", "", "", "", ""]);
+        inputRefs.current[0]?.focus();
       } else {
-        setError(response.message || 'Failed to resend OTP')
+        setError(response.message || "Failed to resend OTP");
       }
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Failed to resend OTP. Please try again.'))
+      setError(getErrorMessage(err, "Failed to resend OTP. Please try again."));
     } finally {
-      setIsResending(false)
+      setIsResending(false);
     }
-  }
+  };
 
   if (!email) {
-    return null
+    return null;
   }
 
   return (
@@ -144,14 +151,18 @@ export default function VerifyOTPPage() {
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
             Verify Your Email
           </h2>
-          <p className="text-gray-600">
-            Enter the 6-digit code sent to
-          </p>
+          <p className="text-gray-600">Enter the 6-digit code sent to</p>
           <p className="font-medium text-blue-600">{email}</p>
         </div>
 
         <div className="bg-white py-8 px-6 shadow-lg rounded-xl border border-gray-100">
-          <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+          <form
+            className="space-y-6"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit();
+            }}
+          >
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-md p-3">
                 <p className="text-sm text-red-600">{error}</p>
@@ -167,7 +178,9 @@ export default function VerifyOTPPage() {
                 {otp.map((digit, index) => (
                   <input
                     key={index}
-                    ref={(el) => { inputRefs.current[index] = el }}
+                    ref={(el) => {
+                      inputRefs.current[index] = el;
+                    }}
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]"
@@ -186,7 +199,10 @@ export default function VerifyOTPPage() {
             <div className="text-center">
               {timeLeft > 0 ? (
                 <p className="text-sm text-gray-600">
-                  Code expires in <span className="font-medium text-red-600">{formatTime(timeLeft)}</span>
+                  Code expires in{" "}
+                  <span className="font-medium text-red-600">
+                    {formatTime(timeLeft)}
+                  </span>
                 </p>
               ) : (
                 <p className="text-sm text-red-600">
@@ -197,7 +213,9 @@ export default function VerifyOTPPage() {
 
             <button
               type="submit"
-              disabled={isLoading || otp.some(digit => digit === '') || timeLeft === 0}
+              disabled={
+                isLoading || otp.some((digit) => digit === "") || timeLeft === 0
+              }
               className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
             >
               {isLoading ? (
@@ -206,7 +224,7 @@ export default function VerifyOTPPage() {
                   Verifying...
                 </div>
               ) : (
-                'Verify Code'
+                "Verify Code"
               )}
             </button>
 
@@ -245,5 +263,5 @@ export default function VerifyOTPPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
