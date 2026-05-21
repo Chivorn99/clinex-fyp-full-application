@@ -322,6 +322,12 @@ class ReportBatchController extends Controller
                 'raw_ocr_text' => null,
             ]);
 
+            $labReport->batch->update([
+                'status' => 'processing',
+                'processing_started_at' => now(),
+                'processing_completed_at' => null
+            ]);
+
             DB::commit();
 
             if ($oldStoragePath && $oldStoragePath !== $storagePath) {
