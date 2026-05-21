@@ -65,11 +65,24 @@ interface BackendLabInfo {
   validatedBy?: string;
 }
 
+interface BackendGroupedTestResults {
+  biochemistry?: BackendTestResult[];
+  enzymology?: BackendTestResult[];
+  hematology?: BackendTestResult[];
+  urine_analysis?: BackendTestResult[];
+  drug_urine?: BackendTestResult[];
+  blood_group?: BackendTestResult[];
+  [key: string]: BackendTestResult[] | undefined;
+}
+
 interface BackendExtractedData {
   rawText?: string;
   patientInfo?: Partial<PatientInfo>;
   labInfo?: BackendLabInfo;
+  // Flat format (legacy regex parser output and normalized batch job output)
   testResults?: BackendTestResult[];
+  // Grouped format (Ollama LLM schema output — may appear in old DB records)
+  test_results?: BackendGroupedTestResults;
 }
 
 interface BackendLabReport {
@@ -279,8 +292,27 @@ export default function VerificationPage() {
           analysisDate: extractedData?.labInfo?.analysisDate || "",
           validatedBy: extractedData?.labInfo?.validatedBy || "",
         },
-        testResults: (extractedData?.testResults || []).map(
-          (test: BackendTestResult, index: number) => ({
+        testResults: (() => {
+          // Prefer flat testResults; fall back to flattening grouped test_results
+          let flatTests: BackendTestResult[] = extractedData?.testResults || [];
+
+          if (flatTests.length === 0 && extractedData?.test_results) {
+            const grouped = extractedData.test_results;
+            const allTests: BackendTestResult[] = [];
+            Object.entries(grouped).forEach(([panel, tests]) => {
+              if (Array.isArray(tests)) {
+                tests.forEach((test) => {
+                  allTests.push({
+                    ...test,
+                    category: test.category || panel.toUpperCase(),
+                  });
+                });
+              }
+            });
+            flatTests = allTests;
+          }
+
+          return flatTests.map((test: BackendTestResult, index: number) => ({
             id: `${labReport.id}_${index}`,
             category: test.category || "",
             testName: test.testName || "",
@@ -288,8 +320,8 @@ export default function VerificationPage() {
             unit: test.unit || "",
             referenceRange: test.referenceRange || "",
             flag: mapBackendFlag(test.flag ?? null),
-          }),
-        ),
+          }));
+        })(),
         extracted_data: extractedData,
         original_filename: labReport.original_filename,
         uploader: labReport.uploader,

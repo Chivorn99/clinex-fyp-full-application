@@ -138,7 +138,7 @@ class ProcessLabReportBatch implements ShouldQueue
             'OLLAMA_ENABLED' => env('OLLAMA_ENABLED', 'false'),
             'OLLAMA_HOST' => env('OLLAMA_HOST', 'http://ollama:11434'),
             'OLLAMA_MODEL' => env('OLLAMA_MODEL', 'phi3:mini'),
-            'OLLAMA_TIMEOUT' => env('OLLAMA_TIMEOUT', '60'),
+            'OLLAMA_TIMEOUT' => env('OLLAMA_TIMEOUT', '180'),
         ]);
         $process->setEnv($env);
 
@@ -221,7 +221,6 @@ class ProcessLabReportBatch implements ShouldQueue
                 // Check if processing was successful
                 $isSuccess = isset($result['success']) ? $result['success'] : !isset($result['error']);
 
-
                 $updateData = [
                     'processed_at' => now(),
                     'processing_time' => $result['processingTime'] ?? null,
@@ -229,8 +228,11 @@ class ProcessLabReportBatch implements ShouldQueue
                 ];
 
                 if ($isSuccess) {
+                    // Normalize: flatten grouped test_results → flat testResults array
+                    $normalizedResult = $this->normalizeExtractedData($result);
+
                     $updateData = array_merge($updateData, [
-                        'extracted_data' => $result,
+                        'extracted_data' => $normalizedResult,
                         'status' => 'processed',
                         'processing_error' => null
                     ]);
@@ -258,6 +260,52 @@ class ProcessLabReportBatch implements ShouldQueue
                 ]);
             }
         }
+    }
+
+    /**
+     * Normalize extracted data from Python script output.
+     *
+     * The Python OCR script may return test results in two formats:
+     * - New grouped format: { "test_results": { "biochemistry": [...], "hematology": [...] } }
+     * - Legacy flat format: { "testResults": [ { "category": "...", ... }, ... ] }
+     *
+     * This method normalizes both into the flat "testResults" format that the
+     * frontend verification page and backend verification controller expect.
+     */
+    private function normalizeExtractedData(array $result): array
+    {
+        // Already has flat testResults — nothing to do
+        if (isset($result['testResults']) && is_array($result['testResults'])) {
+            return $result;
+        }
+
+        // Has grouped test_results — flatten into testResults
+        $groupedResults = $result['test_results'] ?? null;
+        if (is_array($groupedResults)) {
+            $flatTests = [];
+            foreach ($groupedResults as $panel => $tests) {
+                if (!is_array($tests)) {
+                    continue;
+                }
+                foreach ($tests as $test) {
+                    if (!is_array($test)) {
+                        continue;
+                    }
+                    // Ensure category is set from the panel key if missing
+                    if (empty($test['category'])) {
+                        $test['category'] = strtoupper($panel);
+                    }
+                    $flatTests[] = $test;
+                }
+            }
+            $result['testResults'] = $flatTests;
+            unset($result['test_results']); // Remove grouped key to avoid confusion
+        } else {
+            // Neither format found — set empty array
+            $result['testResults'] = [];
+        }
+
+        return $result;
     }
 
     /**

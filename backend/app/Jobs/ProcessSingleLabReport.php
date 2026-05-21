@@ -91,7 +91,7 @@ class ProcessSingleLabReport implements ShouldQueue
                 'OLLAMA_ENABLED' => env('OLLAMA_ENABLED', 'false'),
                 'OLLAMA_HOST' => env('OLLAMA_HOST', 'http://ollama:11434'),
                 'OLLAMA_MODEL' => env('OLLAMA_MODEL', 'phi3:mini'),
-                'OLLAMA_TIMEOUT' => env('OLLAMA_TIMEOUT', '60'),
+                'OLLAMA_TIMEOUT' => env('OLLAMA_TIMEOUT', '180'),
             ]);
             $process->setEnv($env);
 
@@ -119,7 +119,12 @@ class ProcessSingleLabReport implements ShouldQueue
 
             // Update lab report with results
             $isSuccess = isset($result['success']) ? $result['success'] : !isset($result['error']);
-            
+
+            // Normalize: flatten grouped test_results → flat testResults array
+            if ($isSuccess) {
+                $result = $this->normalizeExtractedData($result);
+            }
+
             $updateData = [
                 'processed_at' => now(),
                 'processing_time' => $result['processingTime'] ?? null,
@@ -153,5 +158,48 @@ class ProcessSingleLabReport implements ShouldQueue
 
             // Don't re-throw to prevent job retry (we've already marked as failed)
         }
+    }
+
+    /**
+     * Normalize extracted data from Python script output.
+     *
+     * The Python OCR script may return test results in two formats:
+     * - New grouped format: { "test_results": { "biochemistry": [...], "hematology": [...] } }
+     * - Legacy flat format: { "testResults": [ { "category": "...", ... }, ... ] }
+     *
+     * Normalizes both into the flat "testResults" format expected by the frontend and backend.
+     */
+    private function normalizeExtractedData(array $result): array
+    {
+        // Already has flat testResults — nothing to do
+        if (isset($result['testResults']) && is_array($result['testResults'])) {
+            return $result;
+        }
+
+        // Has grouped test_results — flatten into testResults
+        $groupedResults = $result['test_results'] ?? null;
+        if (is_array($groupedResults)) {
+            $flatTests = [];
+            foreach ($groupedResults as $panel => $tests) {
+                if (!is_array($tests)) {
+                    continue;
+                }
+                foreach ($tests as $test) {
+                    if (!is_array($test)) {
+                        continue;
+                    }
+                    if (empty($test['category'])) {
+                        $test['category'] = strtoupper($panel);
+                    }
+                    $flatTests[] = $test;
+                }
+            }
+            $result['testResults'] = $flatTests;
+            unset($result['test_results']);
+        } else {
+            $result['testResults'] = [];
+        }
+
+        return $result;
     }
 }

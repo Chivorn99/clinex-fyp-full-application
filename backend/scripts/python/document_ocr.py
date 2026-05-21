@@ -147,8 +147,12 @@ def _get_ollama_config() -> Dict[str, Any]:
 def _build_llm_system_prompt(template: Dict[str, Any]) -> str:
     """Build the system prompt for the LLM extraction task."""
     schema = template.get('schema', {})
-    flag_enum = schema.get('flag_enum', ['H', 'L'])
-    categories = schema.get('test_categories', [])
+    
+    # Support both old flat schema and new nested schema
+    lab_schema = schema.get('laboratory_fields', schema)
+    
+    flag_enum = lab_schema.get('flag_enum', ['H', 'L'])
+    categories = lab_schema.get('test_categories', [])
     hospital_phones = schema.get('hospital_phones_to_exclude', [])
 
     return (
@@ -189,8 +193,90 @@ def _build_llm_user_prompt(raw_text: str, template: Dict[str, Any]) -> str:
     return "\n".join(prompt_parts)
 
 
-def _get_ollama_json_schema() -> Dict[str, Any]:
+def detect_document_type(ocr_text: str) -> str:
+    """Detect whether OCR text is a consultation form or lab report."""
+    text_upper = ocr_text.upper()
+    consultation_markers = ['PATIENT CONSULTATION', 'VITAL SIGNS', 'CHIEF COMPLAINT',
+                           'TREATMENT PLAN', 'PRESCRIPTION', 'TENSION ARTERIELLE']
+    lab_markers = ['LABORATORY REPORT', 'HEMATOLOGY', 'BIOCHEMISTRY', 'BIOCHIMISTRY',
+                   'ENZYMOLOGY', 'URINE ANALYSIS', 'DRUG URINE', 'Lab ID']
+    
+    consult_score = sum(1 for m in consultation_markers if m in text_upper)
+    lab_score = sum(1 for m in lab_markers if m in text_upper)
+    
+    return 'consultation' if consult_score > lab_score else 'laboratory'
+
+def _build_consultation_system_prompt(template: Dict[str, Any]) -> str:
+    return (
+        "You are a medical data extractor for hospital consultation forms.\n\n"
+        "STRICT RULES:\n"
+        "1. Extract patient demographics, normalizing age to years/months/days integers.\n"
+        "2. Strip LaTeX notation from vital signs (e.g. $36,5^{\\circ}C$ -> 36.5, $80/mn$ -> 80).\n"
+        "3. Parse blood pressure into systolic and diastolic numbers.\n"
+        "4. If a value cannot be determined, use null.\n"
+    )
+
+def _get_consultation_json_schema() -> Dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "hospital_name": {"type": "string"},
+            "document_type": {"type": "string"},
+            "physician": {"type": ["string", "null"]},
+            "evaluation_date": {"type": ["string", "null"]},
+            "patient_demographics": {
+                "type": "object",
+                "properties": {
+                    "name_khmer": {"type": ["string", "null"]},
+                    "gender": {"type": ["string", "null"]},
+                    "payment_type": {"type": ["string", "null"]},
+                    "age": {
+                        "type": "object",
+                        "properties": {
+                            "years": {"type": ["integer", "null"]},
+                            "months": {"type": ["integer", "null"]},
+                            "days": {"type": ["integer", "null"]}
+                        }
+                    }
+                }
+            },
+            "vital_signs": {
+                "type": "object",
+                "properties": {
+                    "systolic_mmhg": {"type": ["number", "null"]},
+                    "diastolic_mmhg": {"type": ["number", "null"]},
+                    "pulse_bpm": {"type": ["number", "null"]},
+                    "respiratory_rate_per_mn": {"type": ["number", "null"]},
+                    "temperature_celsius": {"type": ["number", "null"]},
+                    "oxygen_saturation_percentage": {"type": ["number", "null"]},
+                    "height_cm": {"type": ["number", "null"]},
+                    "weight_kg": {"type": ["number", "null"]}
+                }
+            },
+            "clinical_notes": {
+                "type": "object",
+                "properties": {
+                    "chief_complaint": {"type": ["string", "null"]},
+                    "current_medications": {"type": ["string", "null"]}
+                }
+            },
+            "treatment_plan": {
+                "type": "object",
+                "properties": {
+                    "prescription_id": {"type": ["string", "null"]},
+                    "laboratory_id": {"type": ["string", "null"]}
+                }
+            }
+        },
+        "required": ["hospital_name", "document_type", "patient_demographics", "vital_signs"]
+    }
+
+def _get_ollama_json_schema(template: Dict[str, Any]) -> Dict[str, Any]:
     """Return the JSON schema for Ollama structured output."""
+    schema = template.get('schema', {})
+    lab_schema = schema.get('laboratory_fields', schema)
+    categories = lab_schema.get('test_categories', [])
+    
     test_result_schema = {
         "type": "object",
         "properties": {
@@ -203,7 +289,10 @@ def _get_ollama_json_schema() -> Dict[str, Any]:
         },
         "required": ["testName", "result", "category"]
     }
-
+    
+    if categories:
+        test_result_schema["properties"]["category"]["enum"] = categories
+    
     return {
         "type": "object",
         "properties": {
@@ -259,7 +348,14 @@ def extract_with_llm(raw_text: str, template: Dict[str, Any]) -> Optional[Dict[s
     model = template.get('llm_model', ollama_config['model'])
     api_url = f"{ollama_config['host']}/api/chat"
 
-    system_prompt = _build_llm_system_prompt(template)
+    doc_type = detect_document_type(raw_text)
+    if doc_type == 'consultation':
+        system_prompt = _build_consultation_system_prompt(template)
+        json_schema = _get_consultation_json_schema()
+    else:
+        system_prompt = _build_llm_system_prompt(template)
+        json_schema = _get_ollama_json_schema(template)
+
     user_prompt = _build_llm_user_prompt(raw_text, template)
 
     payload = {
@@ -268,11 +364,11 @@ def extract_with_llm(raw_text: str, template: Dict[str, Any]) -> Optional[Dict[s
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        "format": _get_ollama_json_schema(),
+        "format": json_schema,
         "stream": False,
         "options": {
             "temperature": 0,
-            "num_ctx": 4096,
+            "num_ctx": 8192,
         }
     }
 
@@ -317,14 +413,66 @@ def extract_with_llm(raw_text: str, template: Dict[str, Any]) -> Optional[Dict[s
         return None
 
 
+def validate_consultation_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
+    vital_signs = result.get('vital_signs', {})
+    if vital_signs:
+        for k, v in list(vital_signs.items()):
+            if isinstance(v, str):
+                # strip latex
+                cleaned = re.sub(r'\$([^$]+)\$', lambda m: m.group(1).replace('{\\circ}', '°').replace(',', '.'), v)
+                # Parse numeric values
+                if k in ['systolic_mmhg', 'diastolic_mmhg', 'pulse_bpm', 'respiratory_rate_per_mn', 
+                         'temperature_celsius', 'oxygen_saturation_percentage', 'height_cm', 'weight_kg']:
+                    # Special case for BP if it wasn't split correctly
+                    if k in ['systolic_mmhg', 'diastolic_mmhg'] and '/' in cleaned:
+                        m = re.search(r'(\d{2,3})\s*/\s*(\d{2,3})', cleaned)
+                        if m:
+                            vital_signs['systolic_mmhg'] = float(m.group(1))
+                            vital_signs['diastolic_mmhg'] = float(m.group(2))
+                            continue
+                    
+                    # Extract first number
+                    num_match = re.search(r'(\d+\.?\d*)', cleaned.replace(',', '.'))
+                    if num_match:
+                        vital_signs[k] = float(num_match.group(1))
+                    else:
+                        vital_signs[k] = None
+                else:
+                    vital_signs[k] = cleaned
+
+    demo = result.get('patient_demographics', {})
+    if demo:
+        # Simple age fallback if age is string
+        age = demo.get('age')
+        if isinstance(age, str):
+            m = re.search(r'(\d+)\s*(?:ឆ្នាំ|Y).*?(\d+)\s*(?:ខែ|M).*?(\d+)\s*(?:ថ្ងៃ|D)', age)
+            if m:
+                demo['age'] = {'years': int(m.group(1)), 'months': int(m.group(2)), 'days': int(m.group(3))}
+            else:
+                m_simple = re.search(r'(\d+)\s*(?:ឆ្នាំ|Y)', age)
+                if m_simple:
+                    demo['age'] = {'years': int(m_simple.group(1)), 'months': 0, 'days': 0}
+            
+    return result
+
 def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
     """Post-LLM validation to catch hallucinations and normalize values.
 
     This is a critical safety net for medical data — never trust raw LLM
     output without validation.
     """
-    # Flag normalization — force to enum
-    for test in result.get('testResults', []):
+    # Normalize garbled units and reference range LaTeX
+    test_results = result.get('test_results', {})
+    if isinstance(test_results, dict):
+        all_tests = []
+        for panel, tests in test_results.items():
+            if isinstance(tests, list):
+                all_tests.extend(tests)
+    else:
+        all_tests = result.get('testResults', [])
+
+    for test in all_tests:
+        # Flag normalization
         flag = test.get('flag')
         if flag is not None:
             flag_upper = str(flag).strip().upper()
@@ -332,6 +480,20 @@ def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
                 test['flag'] = flag_upper
             else:
                 test['flag'] = None
+        
+        # Unit normalization
+        unit = test.get('unit')
+        if unit:
+            unit = unit.replace('응', '%').replace('%0', '%').replace('0P', '%').replace('09', '%')
+            test['unit'] = unit
+            
+        # Reference range cleanup
+        ref = test.get('referenceRange')
+        if ref:
+            # Strip $()$ LaTeX wrappers
+            ref = re.sub(r'\$\(', '(', ref)
+            ref = re.sub(r'\)\$', ')', ref)
+            test['referenceRange'] = ref
 
     # Patient ID format validation
     patient_info = result.get('patientInfo', {})
@@ -956,6 +1118,221 @@ def _fuse_ocr_texts(paddle_text: str, paddle_confidence: float,
         'kiri_line_count': kiri_count,
         'paddle_line_count': paddle_count,
     }
+
+
+class ConsultationReportParser:
+    """Regex fallback parser for KV Hospital Patient Consultation forms.
+
+    Extracts: hospital_name, physician, evaluation_date, patient_demographics,
+    vital_signs (with LaTeX stripping), clinical_notes, treatment_plan.
+    """
+
+    # Regex for stripping LaTeX notation: $36,5^{\circ}C$ → 36.5
+    _LATEX_RE = re.compile(r'\$([^$]+)\$')
+
+    def _strip_latex(self, text: str) -> str:
+        """Remove LaTeX wrappers and normalize notation."""
+        def _clean(m):
+            inner = m.group(1)
+            inner = inner.replace('{\\circ}', '°')
+            inner = inner.replace('^{\\circ}', '°')
+            inner = inner.replace(',', '.')
+            inner = re.sub(r'[°CcFf]', '', inner).strip()
+            return inner
+        return self._LATEX_RE.sub(_clean, text)
+
+    def _parse_number(self, text: str) -> Optional[float]:
+        """Extract first number from text, handling commas as decimal separators."""
+        if not text:
+            return None
+        cleaned = self._strip_latex(str(text))
+        cleaned = cleaned.replace(',', '.')
+        m = re.search(r'(\d+\.?\d*)', cleaned)
+        return float(m.group(1)) if m else None
+
+    def parse_optimized(self, ocr_text: str) -> Dict[str, Any]:
+        text = ocr_text
+        text_stripped = self._strip_latex(text)
+
+        # ── Hospital name ──
+        hospital_name = 'KV Hospital'
+        for marker in ['KV Hospital', 'KV HOSPITAL']:
+            if marker.upper() in text.upper():
+                hospital_name = 'KV Hospital'
+                break
+
+        # ── Physician ──
+        physician = None
+        phys_match = re.search(
+            r'(?:Physician|Doctor|Médecin|Dr\.?\s*:)\s*:?\s*(Dr\.?\s*[A-Za-z\s.]+)',
+            text, re.IGNORECASE
+        )
+        if phys_match:
+            physician = phys_match.group(1).strip()
+
+        # ── Evaluation date → standardize to YYYY-MM-DD HH:MM:SS ──
+        evaluation_date = None
+        date_match = re.search(
+            r'(?:Date|Evaluation)\s*:?\s*(\d{2})/(\d{2})/(\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)',
+            text, re.IGNORECASE
+        )
+        if date_match:
+            d, mo, y, t = date_match.group(1), date_match.group(2), date_match.group(3), date_match.group(4)
+            if len(t) == 5:
+                t += ':00'
+            evaluation_date = f'{y}-{mo}-{d} {t}'
+
+        # ── Patient demographics ──
+        name_khmer = None
+        # Match Khmer script name (sequence of Khmer chars + spaces)
+        khmer_name_match = re.search(
+            r'(?:Patient|ឈ្មោះ|នាម)\s*:?\s*([\u1780-\u17FF\s]{2,})',
+            text
+        )
+        if khmer_name_match:
+            name_khmer = khmer_name_match.group(1).strip()
+
+        gender = None
+        gender_match = re.search(r'(?:Gender|ភេទ)\s*:?\s*(Male|Female|ប្រុស|ស្រី)', text, re.IGNORECASE)
+        if gender_match:
+            g = gender_match.group(1).strip()
+            if g in ('ប្រុស', 'Male', 'male'):
+                gender = 'Male'
+            elif g in ('ស្រី', 'Female', 'female'):
+                gender = 'Female'
+            else:
+                gender = g.capitalize()
+
+        payment_type = None
+        pay_match = re.search(r'(?:Payment|Paiement|ប្រភេទ)\s*:?\s*(\S+)', text, re.IGNORECASE)
+        if pay_match:
+            payment_type = pay_match.group(1).strip()
+
+        # Age: "26ឆ្នាំ 3ខែ 0ថ្ងៃ" or "26 Y 3 M 0 D" or "26ឆ្នាំ/year"
+        age = {'years': None, 'months': None, 'days': None}
+        age_match = re.search(
+            r'(\d+)\s*(?:ឆ្នាំ|Y(?:ear)?)\s*[\s,]*(\d+)\s*(?:ខែ|M(?:onth)?)\s*[\s,]*(\d+)\s*(?:ថ្ងៃ|D(?:ay)?)',
+            text, re.IGNORECASE
+        )
+        if age_match:
+            age = {
+                'years': int(age_match.group(1)),
+                'months': int(age_match.group(2)),
+                'days': int(age_match.group(3))
+            }
+        else:
+            # Simpler: just years
+            age_simple = re.search(r'(\d+)\s*(?:ឆ្នាំ|Y)', text, re.IGNORECASE)
+            if age_simple:
+                age = {'years': int(age_simple.group(1)), 'months': 0, 'days': 0}
+
+        # ── Vital signs ──
+        systolic = None
+        diastolic = None
+        bp_match = re.search(r'(?:Tension|TA|BP)\s*[^:]*:?\s*\$?(\d{2,3})\s*/\s*(\d{2,3})\$?', text_stripped, re.IGNORECASE)
+        if not bp_match:
+            bp_match = re.search(r'(\d{2,3})\s*/\s*(\d{2,3})\s*(?:mmHg|mm)', text_stripped, re.IGNORECASE)
+        if bp_match:
+            systolic = int(bp_match.group(1))
+            diastolic = int(bp_match.group(2))
+
+        pulse = self._parse_number(
+            self._find_vital(text, ['Pouls', 'Pulse', 'FC', 'Heart Rate'])
+        )
+
+        resp_rate = self._parse_number(
+            self._find_vital(text, ['FR', 'Respiratory', 'Resp Rate'])
+        )
+
+        temp = None
+        temp_match = re.search(
+            r'(?:Temp|Temperature|T°)\s*[^:]*:?\s*\$?(\d{2}[,.]?\d*)\s*(?:\^?\{?\\?circ\}?)?[°]?\s*C?\$?',
+            text, re.IGNORECASE
+        )
+        if temp_match:
+            temp = float(temp_match.group(1).replace(',', '.'))
+
+        spo2 = self._parse_number(
+            self._find_vital(text, ['SpO2', 'O2', 'Saturation'])
+        )
+
+        height = self._parse_number(
+            self._find_vital(text, ['Taille', 'Height', 'Ht'])
+        )
+
+        weight = self._parse_number(
+            self._find_vital(text, ['Poids', 'Weight', 'Wt'])
+        )
+
+        # ── Clinical notes ──
+        chief_complaint = None
+        cc_match = re.search(
+            r'(?:Chief\s*Complaint|Motif|CC)\s*:?\s*(.+?)(?=\n|Current|Medication|$)',
+            text, re.IGNORECASE
+        )
+        if cc_match:
+            chief_complaint = cc_match.group(1).strip()
+
+        current_medications = None
+        med_match = re.search(
+            r'(?:Current\s*Medications?|Traitement|Médicaments)\s*:?\s*(.+?)(?=\n|Prescription|Laboratory|$)',
+            text, re.IGNORECASE
+        )
+        if med_match:
+            current_medications = med_match.group(1).strip()
+
+        # ── Treatment plan ──
+        prescription_id = None
+        rx_match = re.search(r'(?:Prescription\s*ID|RX)\s*:?\s*(\S+)', text, re.IGNORECASE)
+        if rx_match:
+            prescription_id = rx_match.group(1).strip()
+
+        laboratory_id = None
+        lab_match = re.search(r'(?:Laboratory\s*ID|Lab\s*ID)\s*:?\s*(LT\d+|\S+)', text, re.IGNORECASE)
+        if lab_match:
+            laboratory_id = lab_match.group(1).strip()
+
+        return {
+            'hospital_name': hospital_name,
+            'document_type': 'Patient Consultation Information',
+            'physician': physician,
+            'evaluation_date': evaluation_date,
+            'patient_demographics': {
+                'name_khmer': name_khmer,
+                'gender': gender,
+                'payment_type': payment_type,
+                'age': age,
+            },
+            'vital_signs': {
+                'systolic_mmhg': systolic,
+                'diastolic_mmhg': diastolic,
+                'pulse_bpm': int(pulse) if pulse else None,
+                'respiratory_rate_per_mn': int(resp_rate) if resp_rate else None,
+                'temperature_celsius': temp,
+                'oxygen_saturation_percentage': int(spo2) if spo2 else None,
+                'height_cm': int(height) if height else None,
+                'weight_kg': int(weight) if weight else None,
+            },
+            'clinical_notes': {
+                'chief_complaint': chief_complaint,
+                'current_medications': current_medications,
+            },
+            'treatment_plan': {
+                'prescription_id': prescription_id,
+                'laboratory_id': laboratory_id,
+            },
+        }
+
+    def _find_vital(self, text: str, keywords: List[str]) -> Optional[str]:
+        """Find a vital sign value by trying multiple keyword labels."""
+        for kw in keywords:
+            match = re.search(
+                rf'{re.escape(kw)}\s*[^:]*:?\s*\$?([^$\n]+)\$?',
+                text, re.IGNORECASE
+            )
+            if match:
+                return match.group(1).strip()
+        return None
 
 
 class OptimizedLabReportParser:
@@ -1722,10 +2099,21 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
 
         # Fallback to regex parser if LLM failed or no template
         if result is None:
-            parser = OptimizedLabReportParser()
-            result = parser.parse_optimized(ocr_text)
+            doc_type = detect_document_type(ocr_text)
+            if doc_type == 'consultation':
+                parser = ConsultationReportParser()
+                result = parser.parse_optimized(ocr_text)
+                result = validate_consultation_extraction(result)
+            else:
+                parser = OptimizedLabReportParser()
+                result = parser.parse_optimized(ocr_text)
             extraction_method = 'regex'
-            print(f'DEBUG: Using regex parser (fallback)', file=sys.stderr)
+            print(f'DEBUG: Using {doc_type} regex parser (fallback)', file=sys.stderr)
+        elif template:
+            # Re-run correct validator for LLM output
+            doc_type = detect_document_type(ocr_text)
+            if doc_type == 'consultation':
+                result = validate_consultation_extraction(result)
 
         result['source_file'] = os.path.basename(file_path)
         result['success'] = True
