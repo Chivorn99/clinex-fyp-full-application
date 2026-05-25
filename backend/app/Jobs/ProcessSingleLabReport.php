@@ -53,9 +53,17 @@ class ProcessSingleLabReport implements ShouldQueue
                 'json'
             ];
 
+            if ($this->labReport->document_type) {
+                $command[] = '--document-type';
+                $command[] = $this->labReport->document_type;
+            }
+
             // Load active report template for LLM extraction
             $templateFile = null;
-            $activeTemplate = ReportTemplate::getActive();
+            $activeTemplate = $this->labReport->template_id 
+                ? ReportTemplate::find($this->labReport->template_id)
+                : ReportTemplate::getActive();
+                
             if ($activeTemplate) {
                 $templateFile = storage_path('app/private/template_' . $this->labReport->id . '.json');
                 file_put_contents($templateFile, json_encode($activeTemplate->toPythonPayload()));

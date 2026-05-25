@@ -59,6 +59,8 @@ class ReportBatchController extends Controller
             'files' => 'required|array|min:1|max:20', 
             'files.*' => 'required|file|mimes:pdf,jpg,jpeg,png,tiff,tif,gif,bmp,webp|max:10240',
             'auto_process' => 'nullable|in:true,false,1,0',
+            'document_type' => 'required|in:lab_report,consultation',
+            'template_id' => 'nullable|exists:templates,id',
         ]);
 
         if ($validator->fails()) {
@@ -186,6 +188,8 @@ class ReportBatchController extends Controller
                     'file_hash' => hash_file('sha256', $file->getPathname()),
                     'status' => 'uploaded',
                     'uploaded_at' => now(),
+                    'document_type' => $request->document_type,
+                    'template_id' => $request->template_id,
                 ]);
 
                 $uploadedFiles[] = [
@@ -309,6 +313,8 @@ class ReportBatchController extends Controller
                 'file_hash' => hash_file('sha256', $file->getPathname()),
                 'status' => 'uploaded',
                 'uploaded_at' => now(),
+                'document_type' => $request->document_type,
+                'template_id' => $request->template_id,
                 'processing_started_at' => null,
                 'processing_completed_at' => null,
                 'processed_at' => null,

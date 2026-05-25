@@ -350,6 +350,26 @@ class LabReportController extends Controller
             // 5. Update batch verified count
             $labReport->batch->increment('verified_reports');
 
+            // 6. Auto-learning: Save as verified example if template exists
+            if ($labReport->template_id && $labReport->raw_ocr_text) {
+                // Keep max 5 examples per template
+                $count = \App\Models\VerifiedExample::where('template_id', $labReport->template_id)->count();
+                if ($count >= 5) {
+                    $oldest = \App\Models\VerifiedExample::where('template_id', $labReport->template_id)
+                        ->oldest()
+                        ->first();
+                    if ($oldest) {
+                        $oldest->delete();
+                    }
+                }
+
+                \App\Models\VerifiedExample::create([
+                    'template_id' => $labReport->template_id,
+                    'original_text' => $labReport->raw_ocr_text,
+                    'corrected_json' => $verifiedData,
+                ]);
+            }
+
             DB::commit();
 
             Log::info('Lab report verified successfully', [

@@ -56,6 +56,8 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // Lab Report Batch Processing Routes
+Route::middleware('auth:sanctum')->get('/templates/active', [TemplateController::class, 'getTemplatesForUpload'])->name('templates.active');
+
 Route::middleware('auth:sanctum')->prefix('batches')->name('batches.')->group(function () {
     // Core CRUD operations
     Route::get('/', [ReportBatchController::class, 'index'])->name('index');

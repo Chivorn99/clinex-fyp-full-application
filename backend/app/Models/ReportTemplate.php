@@ -32,18 +32,37 @@ class ReportTemplate extends Model
         return static::where('is_active', true)->first();
     }
 
+    public function verifiedExamples()
+    {
+        return $this->hasMany(VerifiedExample::class, 'template_id');
+    }
+
     /**
      * Build the template payload for the Python OCR script.
      * This JSON is passed via --template argument to document_ocr.py.
      */
     public function toPythonPayload(): array
     {
+        $verified = $this->verifiedExamples()
+            ->latest()
+            ->take(5)
+            ->get()
+            ->map(fn ($example) => [
+                'input' => $example->original_text,
+                'output' => $example->corrected_json,
+            ])
+            ->toArray();
+
+        // Combine static examples and verified examples, limiting to 5 total
+        $examples = array_merge($this->few_shot_examples ?? [], $verified);
+        $examples = array_slice($examples, 0, 5);
+
         return [
             'name' => $this->name,
             'hospital_code' => $this->hospital_code,
             'llm_model' => $this->llm_model,
             'schema' => $this->schema,
-            'few_shot_examples' => $this->few_shot_examples,
+            'few_shot_examples' => $examples,
         ];
     }
 }

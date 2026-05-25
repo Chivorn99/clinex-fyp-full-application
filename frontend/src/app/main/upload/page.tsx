@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { Upload, FileText, Trash2, Eye, AlertCircle, CheckCircle, X, AlertTriangle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -66,6 +66,13 @@ interface BatchResponse {
     uploaded_files?: unknown[]
 }
 
+interface Template {
+    id: number
+    name: string
+    description: string
+    processor_id: string
+}
+
 const ACCEPTED_TYPES = [
     'application/pdf',
     'image/jpeg', 'image/png', 'image/tiff', 'image/gif',
@@ -88,9 +95,26 @@ export default function UploadPage() {
     const [currentBatch, setCurrentBatch] = useState<BatchResponse | null>(null)
     const [error, setError] = useState<string>('')
     const [autoProcess, setAutoProcess] = useState(true)
+    const [documentType, setDocumentType] = useState<'lab_report' | 'consultation'>('lab_report')
+    const [templateId, setTemplateId] = useState<string>('')
+    const [templates, setTemplates] = useState<Template[]>([])
     const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarning | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const router = useRouter()
+
+    useEffect(() => {
+        const fetchTemplates = async () => {
+            try {
+                const response = await apiClient.get('/templates/active')
+                if (response.success && response.templates) {
+                    setTemplates(response.templates)
+                }
+            } catch (err) {
+                console.warn('Failed to fetch templates:', err)
+            }
+        }
+        fetchTemplates()
+    }, [])
 
     const handleFileSelect = (files: FileList | null) => {
         if (!files) return
@@ -191,8 +215,12 @@ export default function UploadPage() {
                 formData.append('files[]', fileItem.file)
             })
             
-            // Add auto_process flag
+            // Add processing configurations
             formData.append('auto_process', autoProcess ? '1' : '0')
+            formData.append('document_type', documentType)
+            if (templateId) {
+                formData.append('template_id', templateId)
+            }
 
             // Simulate progress updates
             const progressInterval = setInterval(() => {
@@ -413,7 +441,48 @@ export default function UploadPage() {
 
                 {/* Processing Options */}
                 <div className="bg-white shadow rounded-lg p-6">
-                    <div className="flex items-center space-x-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Processing Options</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Document Type
+                            </label>
+                            <select
+                                value={documentType}
+                                onChange={(e) => setDocumentType(e.target.value as 'lab_report' | 'consultation')}
+                                disabled={isUploading || currentBatch !== null}
+                                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                            >
+                                <option value="lab_report">Lab Report (e.g., Blood Test, Urinalysis)</option>
+                                <option value="consultation">Patient Consultation Information</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Extract Template (Optional)
+                            </label>
+                            <select
+                                value={templateId}
+                                onChange={(e) => setTemplateId(e.target.value)}
+                                disabled={isUploading || currentBatch !== null}
+                                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                            >
+                                <option value="">Auto-detect / Universal Extraction</option>
+                                {templates.map(template => (
+                                    <option key={template.id} value={template.id.toString()}>
+                                        {template.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="mt-1 text-xs text-gray-500">
+                                Selecting a template improves extraction accuracy.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center space-x-4 border-t border-gray-200 pt-4">
                         <label className="flex items-center">
                             <input
                                 type="checkbox"

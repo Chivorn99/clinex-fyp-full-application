@@ -182,8 +182,10 @@ def _build_llm_user_prompt(raw_text: str, template: Dict[str, Any]) -> str:
     prompt_parts = ["Extract all structured data from this lab report OCR text.\n"]
 
     if examples:
+        # Prioritize the most recent (verified) examples to adapt to current formats
+        selected_examples = examples[-2:] if len(examples) > 2 else examples
         prompt_parts.append("=== FEW-SHOT EXAMPLES ===\n")
-        for i, ex in enumerate(examples[:2], 1):
+        for i, ex in enumerate(selected_examples, 1):
             prompt_parts.append(f"--- Example {i} Input ---\n{ex['input']}\n")
             prompt_parts.append(f"--- Example {i} Output ---\n{json.dumps(ex['output'], ensure_ascii=False)}\n")
 
@@ -2002,7 +2004,7 @@ def extract_text_from_pdf_local(pdf_path: str) -> str:
     except Exception as e:
         raise Exception(f'All PDF extraction methods failed. Last error: {str(e)}')
 
-def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = None, document_type: Optional[str] = None) -> Dict[str, Any]:
     paddle_config = {}
     kiri_config = {}
     ocr_text = None
@@ -2029,12 +2031,15 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
                 except Exception as paddle_error:
                     print(f'DEBUG: PaddleOCR failed ({paddle_error})', file=sys.stderr)
 
-                # Run Kiri OCR (best for Khmer script text)
-                try:
-                    kiri_result = process_with_kiri_ocr(file_path)
-                    print(f'DEBUG: Kiri OCR pass — {len(kiri_result["text"])} chars, confidence {kiri_result["confidence"]:.3f}', file=sys.stderr)
-                except Exception as kiri_error:
-                    print(f'DEBUG: Kiri OCR failed ({kiri_error})', file=sys.stderr)
+                if document_type != 'consultation':
+                    # Run Kiri OCR (best for Khmer script text)
+                    try:
+                        kiri_result = process_with_kiri_ocr(file_path)
+                        print(f'DEBUG: Kiri OCR pass — {len(kiri_result["text"])} chars, confidence {kiri_result["confidence"]:.3f}', file=sys.stderr)
+                    except Exception as kiri_error:
+                        print(f'DEBUG: Kiri OCR failed ({kiri_error})', file=sys.stderr)
+                else:
+                    print(f'DEBUG: Skipping Kiri OCR for consultation document', file=sys.stderr)
 
                 # Fuse results from both engines
                 if paddle_result and kiri_result:
@@ -2136,7 +2141,7 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
 
         # Fallback to regex parser if LLM failed or no template
         if result is None:
-            doc_type = detect_document_type(ocr_text)
+            doc_type = document_type or detect_document_type(ocr_text)
             if doc_type == 'consultation':
                 parser = ConsultationReportParser()
                 result = parser.parse_optimized(ocr_text)
@@ -2148,7 +2153,7 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
             print(f'DEBUG: Using {doc_type} regex parser (fallback)', file=sys.stderr)
         elif template:
             # Re-run correct validator for LLM output
-            doc_type = detect_document_type(ocr_text)
+            doc_type = document_type or detect_document_type(ocr_text)
             if doc_type == 'consultation':
                 result = validate_consultation_extraction(result)
 
@@ -2173,7 +2178,7 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
             }
         }
 
-def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = None, template: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = None, template: Optional[Dict[str, Any]] = None, document_type: Optional[str] = None) -> List[Dict[str, Any]]:
     # When using LLM, serialize to avoid GPU contention
     if template and max_workers is None:
         max_workers = 1
@@ -2184,7 +2189,7 @@ def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = N
     start_time = time.time()
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_file = {executor.submit(process_single_file, fp, template): fp for fp in file_paths}
+        future_to_file = {executor.submit(process_single_file, fp, template, document_type): fp for fp in file_paths}
         for future in concurrent.futures.as_completed(future_to_file):
             try:
                 result = future.result()
@@ -2211,6 +2216,7 @@ def main():
     parser.add_argument('--workers', type=int, default=None, help='Parallel workers (default: 1 for LLM, 3 for regex)')
     parser.add_argument('--output-file', help='Output file (default: stdout)')
     parser.add_argument('--template', help='Path to JSON file with report template for LLM extraction')
+    parser.add_argument('--document-type', choices=['lab_report', 'consultation'], help='Type of document to guide processing')
     args = parser.parse_args()
 
     # Load template if provided
@@ -2226,7 +2232,7 @@ def main():
     results = []
     try:
         if args.file:
-            result = process_single_file(args.file, template)
+            result = process_single_file(args.file, template, args.document_type)
             results = [result]
         elif args.batch:
             batch_dir = Path(args.batch)
@@ -2236,11 +2242,11 @@ def main():
             print(f'DEBUG: Found {len(file_paths)} files to process', file=sys.stderr)
             if not file_paths:
                 raise Exception(f'No supported files (PDF/Image/TXT) found in {batch_dir}')
-            results = process_batch_parallel(file_paths, args.workers, template)
+            results = process_batch_parallel(file_paths, args.workers, template, args.document_type)
         elif args.file_list:
             with open(args.file_list, 'r') as f:
                 file_paths = [line.strip() for line in f if line.strip()]
-            results = process_batch_parallel(file_paths, args.workers, template)
+            results = process_batch_parallel(file_paths, args.workers, template, args.document_type)
         if args.output_format == 'json':
             output = json.dumps(results, ensure_ascii=False)
         else:
