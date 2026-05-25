@@ -53,27 +53,33 @@ export default function SystemPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastChecked, setLastChecked] = useState<string>("");
 
-  const fetchHealth = useCallback(async (showRefresh = false) => {
+  const fetchHealth = useCallback(async (showRefresh = false, isPolling = false) => {
     if (showRefresh) setRefreshing(true);
-    else setLoading(true);
+    else if (!isPolling) setLoading(true);
     try {
       const data = await apiClient.get("/admin/system-health");
       setHealth(data);
       setLastChecked(new Date().toLocaleString());
-      setError(null);
+      if (!isPolling) setError(null);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load system health",
-      );
+      if (!isPolling) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load system health",
+        );
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!isPolling) setLoading(false);
+      if (showRefresh) setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     if (hasPermission("view_system_health")) {
       fetchHealth();
+      const interval = setInterval(() => {
+        fetchHealth(false, true);
+      }, 5000);
+      return () => clearInterval(interval);
     } else {
       setLoading(false);
     }

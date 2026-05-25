@@ -359,9 +359,9 @@ class AdminController extends Controller
 
         // Queue check
         $health['queue'] = [
-            'pending_jobs'    => DB::table('jobs')->count(),
+            'pending_jobs'    => \Illuminate\Support\Facades\Queue::size(),
             'failed_jobs'     => DB::table('failed_jobs')->count(),
-            'processing_jobs' => DB::table('jobs')->whereNotNull('reserved_at')->count(),
+            'processing_jobs' => 0, // Using Queue size for pending
         ];
 
         // Disk usage

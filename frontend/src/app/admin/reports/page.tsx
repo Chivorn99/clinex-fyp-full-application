@@ -54,8 +54,8 @@ export default function ReportsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchReports = useCallback(async () => {
-    setLoading(true);
+  const fetchReports = useCallback(async (isPolling = false) => {
+    if (!isPolling) setLoading(true);
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -72,18 +72,24 @@ export default function ReportsPage() {
       setTotalPages(data.last_page);
       setTotal(data.total);
     } catch (err) {
-      showToast(
-        "error",
-        err instanceof Error ? err.message : "Failed to load reports",
-      );
+      if (!isPolling) {
+        showToast(
+          "error",
+          err instanceof Error ? err.message : "Failed to load reports",
+        );
+      }
     } finally {
-      setLoading(false);
+      if (!isPolling) setLoading(false);
     }
   }, [page, statusFilter, verifiedFilter, search]);
 
   useEffect(() => {
     if (hasPermission("manage_reports")) {
       fetchReports();
+      const interval = setInterval(() => {
+        fetchReports(true);
+      }, 5000);
+      return () => clearInterval(interval);
     } else {
       setLoading(false);
     }
