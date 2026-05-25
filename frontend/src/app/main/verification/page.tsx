@@ -392,7 +392,7 @@ export default function VerificationPage() {
     [fetchPdfData, handleFetchError, transformLabReportToProcessedReport],
   );
 
-  const fetchBatchReports = useCallback(async () => {
+  const fetchBatchReports = useCallback(async (isPolling = false) => {
     try {
       const response = await apiClient.get(
         `/batches/${batchId}/reports-for-verification`,
@@ -416,17 +416,32 @@ export default function VerificationPage() {
         transformLabReportToProcessedReport(report, report.extracted_data),
       );
 
-      setReports(transformedReports);
+      setReports((prevReports) => {
+        if (isPolling) {
+          const prevReportsMap = new Map(prevReports.map(r => [r.id, r]));
+          return transformedReports.map(tr => {
+            const existing = prevReportsMap.get(tr.id);
+            if (existing) {
+              if (existing.status !== tr.status) {
+                return tr;
+              }
+              return existing;
+            }
+            return tr;
+          });
+        }
+        return transformedReports;
+      });
 
-      // Check if batch is still processing (no reports ready yet)
+      // Check if batch is still processing
       const batchStatus = apiResponse.batch?.status || '';
-      if (transformedReports.length === 0 && (batchStatus === 'processing' || batchStatus === 'pending')) {
+      if (batchStatus === 'processing' || batchStatus === 'pending') {
         setIsProcessing(true);
       } else {
         setIsProcessing(false);
       }
 
-      if (transformedReports.length > 0) {
+      if (!isPolling && transformedReports.length > 0) {
         const targetReport = reportId
           ? transformedReports.find((r: ProcessedReport) => r.id === reportId)
           : transformedReports[0];
@@ -437,10 +452,14 @@ export default function VerificationPage() {
       }
     } catch (err: unknown) {
       console.error("Failed to fetch batch reports:", err);
-      handleFetchError(err, `batch ${batchId}`);
-      setPageError(`Failed to load batch reports. Please try again.`);
+      if (!isPolling) {
+        handleFetchError(err, `batch ${batchId}`);
+        setPageError(`Failed to load batch reports. Please try again.`);
+      }
     } finally {
-      setPageLoading(false);
+      if (!isPolling) {
+        setPageLoading(false);
+      }
     }
   }, [
     batchId,
@@ -522,7 +541,7 @@ export default function VerificationPage() {
   useEffect(() => {
     if (!isProcessing) return;
     const interval = setInterval(() => {
-      fetchBatchReports();
+      fetchBatchReports(true);
     }, 5000);
     return () => clearInterval(interval);
   }, [isProcessing, fetchBatchReports]);
