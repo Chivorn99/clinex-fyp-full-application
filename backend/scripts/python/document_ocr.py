@@ -875,51 +875,62 @@ def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
         file=sys.stderr,
     )
 
-    if mime_type == 'application/pdf':
-        try:
-            import fitz
-        except ImportError as import_error:
-            raise Exception('PyMuPDF is required for PDF + PaddleOCR flow') from import_error
-
-        doc = fitz.open(file_path)
-        all_text: List[str] = []
-        page_confidences: List[float] = []
-
-        for page_num in range(len(doc)):
-            page = doc.load_page(page_num)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-            temp_img_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
-            pix.save(temp_img_path)
-
+    try:
+        if mime_type == 'application/pdf':
             try:
-                result = _call_paddle_ocr(ocr, temp_img_path)
-                page_text, page_confidence = _parse_paddle_result(result)
-                if page_text:
-                    all_text.append(page_text)
-                page_confidences.append(page_confidence)
-                print(f'DEBUG: PaddleOCR processed page {page_num + 1} with confidence {page_confidence:.3f}', file=sys.stderr)
-            finally:
-                if os.path.exists(temp_img_path):
-                    os.remove(temp_img_path)
+                import fitz
+            except ImportError as import_error:
+                raise Exception('PyMuPDF is required for PDF + PaddleOCR flow') from import_error
 
-        doc.close()
-        avg_confidence = sum(page_confidences) / len(page_confidences) if page_confidences else 0.0
-        joined_text = '\n'.join(all_text)
-        print(f'DEBUG: PaddleOCR extracted {len(joined_text)} characters with avg confidence {avg_confidence:.3f}', file=sys.stderr)
+            doc = fitz.open(file_path)
+            all_text: List[str] = []
+            page_confidences: List[float] = []
+
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                temp_img_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
+                pix.save(temp_img_path)
+
+                try:
+                    result = _call_paddle_ocr(ocr, temp_img_path)
+                    page_text, page_confidence = _parse_paddle_result(result)
+                    if page_text:
+                        all_text.append(page_text)
+                    page_confidences.append(page_confidence)
+                    print(f'DEBUG: PaddleOCR processed page {page_num + 1} with confidence {page_confidence:.3f}', file=sys.stderr)
+                finally:
+                    if os.path.exists(temp_img_path):
+                        os.remove(temp_img_path)
+
+            doc.close()
+            avg_confidence = sum(page_confidences) / len(page_confidences) if page_confidences else 0.0
+            joined_text = '\n'.join(all_text)
+            print(f'DEBUG: PaddleOCR extracted {len(joined_text)} characters with avg confidence {avg_confidence:.3f}', file=sys.stderr)
+            return {
+                'text': joined_text,
+                'confidence': avg_confidence,
+                'page_confidences': page_confidences,
+            }
+
+        result = _call_paddle_ocr(ocr, file_path)
+        text, confidence = _parse_paddle_result(result)
+        print(f'DEBUG: PaddleOCR extracted {len(text)} characters with confidence {confidence:.3f}', file=sys.stderr)
         return {
-            'text': joined_text,
-            'confidence': avg_confidence,
-            'page_confidences': page_confidences,
+            'text': text,
+            'confidence': confidence,
+            'page_confidences': [confidence],
         }
-
-    result = _call_paddle_ocr(ocr, file_path)
-    text, confidence = _parse_paddle_result(result)
-    print(f'DEBUG: PaddleOCR extracted {len(text)} characters with confidence {confidence:.3f}', file=sys.stderr)
-    return {
-        'text': text,
-        'confidence': confidence,
-        'page_confidences': [confidence],
-    }
+    finally:
+        try:
+            del ocr
+            import gc
+            gc.collect()
+            import paddle
+            paddle.device.cuda.empty_cache()
+            print('DEBUG: PaddlePaddle GPU memory cleared', file=sys.stderr)
+        except Exception as e:
+            print(f'DEBUG: Error clearing PaddlePaddle GPU memory: {e}', file=sys.stderr)
 
 
 def process_with_kiri_ocr(file_path: str) -> Dict[str, Any]:
@@ -936,63 +947,74 @@ def process_with_kiri_ocr(file_path: str) -> Dict[str, Any]:
     decode_method = kiri_config.get('decode_method', 'accurate')
     ocr = KiriOCR(decode_method=decode_method)
 
-    if mime_type == 'application/pdf':
-        # Kiri OCR only works with images — render PDF pages via PyMuPDF
-        try:
-            import fitz
-        except ImportError as import_error:
-            raise Exception('PyMuPDF is required for PDF + Kiri OCR flow') from import_error
-
-        doc = fitz.open(file_path)
-        all_text: List[str] = []
-        all_results: List[Dict[str, Any]] = []
-        page_confidences: List[float] = []
-
-        for page_num in range(len(doc)):
-            page = doc.load_page(page_num)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-            temp_img_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
-            pix.save(temp_img_path)
-
+    try:
+        if mime_type == 'application/pdf':
+            # Kiri OCR only works with images — render PDF pages via PyMuPDF
             try:
-                text, results = ocr.extract_text(temp_img_path)
-                if text:
-                    all_text.append(text)
-                # Compute average confidence for this page
-                if results:
-                    page_conf = sum(r.get('confidence', 0.0) for r in results) / len(results)
-                    all_results.extend(results)
-                else:
-                    page_conf = 0.0
-                page_confidences.append(page_conf)
-                print(f'DEBUG: Kiri OCR processed page {page_num + 1} with confidence {page_conf:.3f}', file=sys.stderr)
-            finally:
-                if os.path.exists(temp_img_path):
-                    os.remove(temp_img_path)
+                import fitz
+            except ImportError as import_error:
+                raise Exception('PyMuPDF is required for PDF + Kiri OCR flow') from import_error
 
-        doc.close()
-        avg_confidence = sum(page_confidences) / len(page_confidences) if page_confidences else 0.0
-        joined_text = '\n'.join(all_text)
-        print(f'DEBUG: Kiri OCR extracted {len(joined_text)} characters with avg confidence {avg_confidence:.3f}', file=sys.stderr)
+            doc = fitz.open(file_path)
+            all_text: List[str] = []
+            all_results: List[Dict[str, Any]] = []
+            page_confidences: List[float] = []
+
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                temp_img_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
+                pix.save(temp_img_path)
+
+                try:
+                    text, results = ocr.extract_text(temp_img_path)
+                    if text:
+                        all_text.append(text)
+                    # Compute average confidence for this page
+                    if results:
+                        page_conf = sum(r.get('confidence', 0.0) for r in results) / len(results)
+                        all_results.extend(results)
+                    else:
+                        page_conf = 0.0
+                    page_confidences.append(page_conf)
+                    print(f'DEBUG: Kiri OCR processed page {page_num + 1} with confidence {page_conf:.3f}', file=sys.stderr)
+                finally:
+                    if os.path.exists(temp_img_path):
+                        os.remove(temp_img_path)
+
+            doc.close()
+            avg_confidence = sum(page_confidences) / len(page_confidences) if page_confidences else 0.0
+            joined_text = '\n'.join(all_text)
+            print(f'DEBUG: Kiri OCR extracted {len(joined_text)} characters with avg confidence {avg_confidence:.3f}', file=sys.stderr)
+            return {
+                'text': joined_text,
+                'confidence': avg_confidence,
+                'results': all_results,
+                'page_confidences': page_confidences,
+            }
+
+        # Image file — process directly
+        text, results = ocr.extract_text(file_path)
+        avg_confidence = 0.0
+        if results:
+            avg_confidence = sum(r.get('confidence', 0.0) for r in results) / len(results)
+        print(f'DEBUG: Kiri OCR extracted {len(text)} characters with confidence {avg_confidence:.3f}', file=sys.stderr)
         return {
-            'text': joined_text,
+            'text': text,
             'confidence': avg_confidence,
-            'results': all_results,
-            'page_confidences': page_confidences,
+            'results': results,
+            'page_confidences': [avg_confidence],
         }
-
-    # Image file — process directly
-    text, results = ocr.extract_text(file_path)
-    avg_confidence = 0.0
-    if results:
-        avg_confidence = sum(r.get('confidence', 0.0) for r in results) / len(results)
-    print(f'DEBUG: Kiri OCR extracted {len(text)} characters with confidence {avg_confidence:.3f}', file=sys.stderr)
-    return {
-        'text': text,
-        'confidence': avg_confidence,
-        'results': results,
-        'page_confidences': [avg_confidence],
-    }
+    finally:
+        try:
+            del ocr
+            import gc
+            gc.collect()
+            import torch
+            torch.cuda.empty_cache()
+            print('DEBUG: PyTorch GPU memory cleared', file=sys.stderr)
+        except Exception as e:
+            print(f'DEBUG: Error clearing PyTorch GPU memory: {e}', file=sys.stderr)
 
 
 def _detect_line_script(text: str) -> str:
@@ -1995,47 +2017,62 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
         kiri_config = _get_kiri_config()
         
         if mime_type in {'application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp'}:
-            # ── Dual-engine mode: Paddle primary, Kiri fallback ──
+            # ── Dual-engine mode: run BOTH Paddle + Kiri, fuse results ──
             if paddle_config['enabled'] and kiri_config['enabled']:
-                # PaddleOCR is primary — best for structured English/numeric lab data
+                paddle_result = None
+                kiri_result = None
+
+                # Run PaddleOCR (best for structured English/numeric lab data)
                 try:
                     paddle_result = process_with_paddle_ocr(file_path)
+                    print(f'DEBUG: PaddleOCR pass — {len(paddle_result["text"])} chars, confidence {paddle_result["confidence"]:.3f}', file=sys.stderr)
+                except Exception as paddle_error:
+                    print(f'DEBUG: PaddleOCR failed ({paddle_error})', file=sys.stderr)
+
+                # Run Kiri OCR (best for Khmer script text)
+                try:
+                    kiri_result = process_with_kiri_ocr(file_path)
+                    print(f'DEBUG: Kiri OCR pass — {len(kiri_result["text"])} chars, confidence {kiri_result["confidence"]:.3f}', file=sys.stderr)
+                except Exception as kiri_error:
+                    print(f'DEBUG: Kiri OCR failed ({kiri_error})', file=sys.stderr)
+
+                # Fuse results from both engines
+                if paddle_result and kiri_result:
+                    fused = _fuse_ocr_texts(
+                        paddle_result['text'], paddle_result['confidence'],
+                        kiri_result['text'], kiri_result['confidence'],
+                        kiri_result.get('results', []),
+                    )
+                    ocr_text = fused['text']
+                    confidence = fused['confidence']
+                    ocr_engine = f'fused (paddle={fused.get("paddle_line_count", 0)}, kiri={fused.get("kiri_line_count", 0)})'
+                    print(f'DEBUG: Fused output — {len(ocr_text)} chars, confidence {confidence:.3f}', file=sys.stderr)
+                elif paddle_result:
                     ocr_text = paddle_result['text']
                     confidence = paddle_result['confidence']
-                    ocr_engine = 'paddle (primary)'
-                    print(f'DEBUG: PaddleOCR primary pass — {len(ocr_text)} chars, confidence {confidence:.3f}', file=sys.stderr)
-                except Exception as paddle_error:
-                    print(f'DEBUG: PaddleOCR failed ({paddle_error}), trying Kiri OCR fallback', file=sys.stderr)
-
-                    # KiriOCR fallback — Khmer-specialized transformer
+                    ocr_engine = 'paddle (kiri unavailable)'
+                elif kiri_result:
+                    ocr_text = kiri_result['text']
+                    confidence = kiri_result['confidence']
+                    ocr_engine = 'kiri (paddle unavailable)'
+                else:
+                    # Both failed — try Google as last resort
+                    print(f'DEBUG: Both local OCR engines failed, trying Google', file=sys.stderr)
                     try:
-                        kiri_result = process_with_kiri_ocr(file_path)
-                        ocr_text = kiri_result['text']
-                        confidence = kiri_result['confidence']
-                        ocr_engine = 'kiri (fallback from paddle)'
-                        print(f'DEBUG: Kiri OCR fallback — {len(ocr_text)} chars, confidence {confidence:.3f}', file=sys.stderr)
-                    except Exception as kiri_error:
-                        print(f'DEBUG: Kiri OCR also failed ({kiri_error}), trying Google', file=sys.stderr)
+                        ocr_text = process_with_google_document_ai(file_path)
+                        ocr_engine = 'google (fallback from local engines)'
+                    except Exception as google_error:
+                        raise Exception(f'All OCR engines failed. Google: {google_error}')
 
-                        # Google last resort
-                        try:
-                            ocr_text = process_with_google_document_ai(file_path)
-                            ocr_engine = 'google (fallback from local engines)'
-                        except Exception as google_error:
-                            raise Exception(
-                                f'All OCR engines failed. Paddle: {paddle_error}, '
-                                f'Kiri: {kiri_error}, Google: {google_error}'
-                            )
-
-                # If PaddleOCR confidence is below threshold, try Google as enhancement
-                if confidence < paddle_config['confidence_threshold'] and ocr_engine.startswith('paddle'):
-                    print(f'DEBUG: PaddleOCR confidence {confidence:.3f} below {paddle_config["confidence_threshold"]}, trying Google', file=sys.stderr)
+                # If fused/paddle confidence is below threshold, try Google as enhancement
+                if confidence < paddle_config['confidence_threshold'] and not ocr_engine.startswith('google'):
+                    print(f'DEBUG: OCR confidence {confidence:.3f} below {paddle_config["confidence_threshold"]}, trying Google', file=sys.stderr)
                     try:
                         google_text = process_with_google_document_ai(file_path)
                         ocr_text = google_text
-                        ocr_engine = f'google (fallback from paddle low-confidence)'
+                        ocr_engine = f'google (fallback from low-confidence)'
                     except Exception as google_fallback_error:
-                        print(f'DEBUG: Google fallback unavailable ({google_fallback_error}); keeping PaddleOCR output', file=sys.stderr)
+                        print(f'DEBUG: Google fallback unavailable ({google_fallback_error}); keeping local OCR output', file=sys.stderr)
 
             # ── Paddle-only mode ──
             elif paddle_config['enabled']:

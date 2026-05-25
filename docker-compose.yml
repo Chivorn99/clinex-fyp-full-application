@@ -18,16 +18,39 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:alpine
+    container_name: clinex-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        PADDLE_VARIANT: gpu
     container_name: clinex-backend
     restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     working_dir: /var/www/html
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     volumes:
       - ./backend:/var/www/html
       - backend_vendor:/var/www/html/vendor
@@ -42,7 +65,7 @@ services:
       DB_DATABASE: ${MYSQL_DATABASE:-clinex}
       DB_USERNAME: ${MYSQL_USER:-clinex}
       DB_PASSWORD: ${MYSQL_PASSWORD:-clinex_password}
-      QUEUE_CONNECTION: database
+      QUEUE_CONNECTION: redis
     ports:
       - "8000:8000"
     command: >
@@ -54,12 +77,23 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        PADDLE_VARIANT: gpu
     container_name: clinex-queue
     restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     working_dir: /var/www/html
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     volumes:
       - ./backend:/var/www/html
       - backend_vendor:/var/www/html/vendor
@@ -72,10 +106,10 @@ services:
       DB_DATABASE: ${MYSQL_DATABASE:-clinex}
       DB_USERNAME: ${MYSQL_USER:-clinex}
       DB_PASSWORD: ${MYSQL_PASSWORD:-clinex_password}
-      QUEUE_CONNECTION: database
+      QUEUE_CONNECTION: redis
     command: >
       sh -lc "composer install --no-interaction --prefer-dist --no-progress
-      && php artisan queue:work --queue=default,lab-reports --tries=1 --timeout=300"
+      && php artisan horizon"
 
   ollama:
     image: ollama/ollama:latest

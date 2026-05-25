@@ -18,7 +18,7 @@ class ProcessSingleLabReport implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected $labReport;
-    public $timeout = 300; // 5 minutes timeout per file
+    public $timeout = 600; // 10 minutes timeout per file
 
     public function __construct(LabReport $labReport)
     {
@@ -70,7 +70,7 @@ class ProcessSingleLabReport implements ShouldQueue
             ]);
 
             $process = new Process($command);
-            $process->setTimeout(180); // 3 minutes per file
+            $process->setTimeout(600); // 10 minutes per file
 
             // Pass environment variables so Python can find credentials
             $credentialsEnv = env('GOOGLE_APPLICATION_CREDENTIALS', '');
@@ -91,7 +91,7 @@ class ProcessSingleLabReport implements ShouldQueue
                 'OLLAMA_ENABLED' => env('OLLAMA_ENABLED', 'false'),
                 'OLLAMA_HOST' => env('OLLAMA_HOST', 'http://ollama:11434'),
                 'OLLAMA_MODEL' => env('OLLAMA_MODEL', 'phi3:mini'),
-                'OLLAMA_TIMEOUT' => env('OLLAMA_TIMEOUT', '180'),
+                'OLLAMA_TIMEOUT' => env('OLLAMA_TIMEOUT', '600'),
             ]);
             $process->setEnv($env);
 
@@ -158,6 +158,9 @@ class ProcessSingleLabReport implements ShouldQueue
 
             // Don't re-throw to prevent job retry (we've already marked as failed)
         }
+
+        // Check if this was the last report in the batch and update batch status if needed
+        $this->checkBatchCompletion();
     }
 
     /**
@@ -201,5 +204,63 @@ class ProcessSingleLabReport implements ShouldQueue
         }
 
         return $result;
+    }
+
+    /**
+     * Check if all reports in the batch are processed and update final batch status.
+     */
+    private function checkBatchCompletion()
+    {
+        if (!$this->labReport->batch_id) {
+            return;
+        }
+
+        $batch = $this->labReport->batch;
+        
+        // Use a lock to prevent race conditions when multiple jobs finish at the exact same time
+        $lock = \Illuminate\Support\Facades\Cache::lock('batch_completion_' . $batch->id, 10);
+        
+        if ($lock->get()) {
+            try {
+                $batch->refresh();
+                
+                if ($batch->status !== 'processing') {
+                    return;
+                }
+
+                $statusCounts = $batch->labReports()
+                    ->selectRaw('status, count(*) as count')
+                    ->groupBy('status')
+                    ->pluck('count', 'status')
+                    ->toArray();
+
+                $processedCount = $statusCounts['processed'] ?? 0;
+                $failedCount = $statusCounts['failed'] ?? 0;
+                $totalProcessed = $processedCount + $failedCount;
+
+                if ($totalProcessed >= $batch->total_reports) {
+                    $finalStatus = 'completed';
+                    if ($failedCount > 0 && $processedCount > 0) {
+                        $finalStatus = 'completed_with_errors';
+                    } elseif ($failedCount > 0 && $processedCount === 0) {
+                        $finalStatus = 'failed';
+                    }
+
+                    $batch->update([
+                        'processed_reports' => $processedCount,
+                        'failed_reports' => $failedCount,
+                        'status' => $finalStatus,
+                        'processing_completed_at' => now()
+                    ]);
+
+                    Log::info('Batch processing completed from single job', [
+                        'batch_id' => $batch->id,
+                        'final_status' => $finalStatus
+                    ]);
+                }
+            } finally {
+                $lock->release();
+            }
+        }
     }
 }
