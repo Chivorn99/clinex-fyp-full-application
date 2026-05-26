@@ -134,10 +134,14 @@ Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(functi
         Route::post('/bulk-reprocess', [App\Http\Controllers\AdminController::class, 'bulkReprocessReports'])->name('bulk-reprocess');
     });
 
-    // System health (requires view_system_health)
+    // System Health
     Route::get('/system-health', [App\Http\Controllers\AdminController::class, 'systemHealth'])
         ->middleware('permission:view_system_health')
         ->name('system-health');
+
+    // Training Data Management
+    Route::apiResource('training-data', App\Http\Controllers\VerifiedExamplesController::class)
+        ->middleware('permission:manage_templates'); // Reusing manage_templates or we can add a new one
 });
 
 // Health check route

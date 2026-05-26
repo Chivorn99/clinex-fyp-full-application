@@ -21,7 +21,7 @@ BACKEND_URL := http://$(HOST):$(BACKEND_PORT)
 API_URL := $(BACKEND_URL)/api
 FRONTEND_URL := http://$(HOST):$(FRONTEND_PORT)
 
-.PHONY: help clone setup env backend-env frontend-env intranet-config install backend-install frontend-install dev-backend dev-frontend status docker-up docker-down docker-restart docker-logs docker-build docker-migrate docker-shell-backend docker-shell-frontend docker-intranet-cert docker-intranet-up docker-intranet-down docker-intranet-logs docker-intranet-migrate
+.PHONY: help clone setup env backend-env frontend-env intranet-config install backend-install frontend-install dev-backend dev-frontend status system-design-html docker-up docker-down docker-restart docker-logs docker-build docker-migrate docker-shell-backend docker-shell-frontend docker-intranet-cert docker-intranet-up docker-intranet-down docker-intranet-logs docker-intranet-migrate
 
 help:
 	@echo "Clinex local/intranet commands"
@@ -30,6 +30,7 @@ help:
 	@echo "  make setup HOST=10.10.5.20      Create local env files and install dependencies"
 	@echo "  make intranet-config HOST=10.10.5.20  Update URLs for the hospital LAN host"
 	@echo "  make install                    Install backend and frontend dependencies"
+	@echo "  make system-design-html         Regenerate clinex-system-design.html from clinex_system_design.md"
 	@echo "  make dev-backend                Run Laravel on 0.0.0.0:$(BACKEND_PORT)"
 	@echo "  make dev-frontend               Run Next.js on 0.0.0.0:$(FRONTEND_PORT)"
 	@echo "  make docker-up                  Start full stack with Docker"
@@ -76,6 +77,9 @@ status:
 	@echo "Backend:  $(BACKEND_URL)"
 	@echo "API:      $(API_URL)"
 	@echo "Frontend: $(FRONTEND_URL)"
+
+system-design-html:
+	@node tools/generate-system-design-html.mjs
 
 docker-build:
 	@$(COMPOSE) build

@@ -187,7 +187,7 @@ export default function UploadPage() {
     // Proceed after duplicate warning is acknowledged
     const handleDuplicateConfirm = async () => {
         setDuplicateWarning(null)
-        await performUpload()
+        await performUpload(true)
     }
 
     const handleDuplicateCancel = () => {
@@ -198,7 +198,7 @@ export default function UploadPage() {
         setDuplicateWarning(null)
     }
 
-    const performUpload = async () => {
+    const performUpload = async (replaceDuplicates = false) => {
         setIsUploading(true)
         setError('')
 
@@ -220,6 +220,9 @@ export default function UploadPage() {
             formData.append('document_type', documentType)
             if (templateId) {
                 formData.append('template_id', templateId)
+            }
+            if (replaceDuplicates) {
+                formData.append('replace_duplicates', '1')
             }
 
             // Simulate progress updates

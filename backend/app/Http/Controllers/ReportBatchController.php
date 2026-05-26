@@ -100,8 +100,11 @@ class ReportBatchController extends Controller
             }
         }
 
+        $replaceDuplicates = $request->boolean('replace_duplicates', false);
+
         if (count($files) > 1) {
             $duplicateFilenames = [];
+            $unverifiedDuplicates = [];
 
             foreach ($files as $file) {
                 $fileHash = hash_file('sha256', $file->getPathname());
@@ -116,11 +119,15 @@ class ReportBatchController extends Controller
                     continue;
                 }
 
-                $duplicateFilenames[] = $file->getClientOriginalName();
+                if ($replaceDuplicates) {
+                    $unverifiedDuplicates[] = $existingReport;
+                } else {
+                    $duplicateFilenames[] = $file->getClientOriginalName();
+                }
             }
 
             if (!empty($duplicateFilenames)) {
-                $message = 'One or more files already exist as unverified reports. Please replace them one at a time from the report details page.';
+                $message = 'One or more files already exist and cannot be replaced.';
 
                 if ($request->expectsJson()) {
                     return response()->json([
@@ -138,6 +145,15 @@ class ReportBatchController extends Controller
                 return back()->withErrors([
                     'files' => $message . ' Duplicates: ' . implode(', ', array_unique($duplicateFilenames)),
                 ])->withInput();
+            }
+
+            if ($replaceDuplicates && !empty($unverifiedDuplicates)) {
+                foreach ($unverifiedDuplicates as $report) {
+                    if ($report->file_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($report->file_path)) {
+                        \Illuminate\Support\Facades\Storage::disk('public')->delete($report->file_path);
+                    }
+                    $report->delete();
+                }
             }
         }
 

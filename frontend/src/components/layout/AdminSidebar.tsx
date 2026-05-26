@@ -14,6 +14,7 @@ import {
   Shield,
   ChevronLeft,
   ChevronRight,
+  Database,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
@@ -47,6 +48,12 @@ const navItems: NavItem[] = [
     label: 'OCR Templates',
     href: '/admin/templates',
     icon: <Brain className="h-5 w-5" />,
+    permission: 'manage_templates',
+  },
+  {
+    label: 'Training Data',
+    href: '/admin/training-data',
+    icon: <Database className="h-5 w-5" />,
     permission: 'manage_templates',
   },
   {

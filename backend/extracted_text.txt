@@ -1,30 +1,99 @@
-werings Feat
-mas
-saj 125
+spiimato
+6②
+seinaj les
 KV Hospital
+C₂
 K+
-ñšaj šunɲmist npmůdy:wimuziñpo shijm:qñonviná vůjungınınnkonu
-bniswu:qui:máquumïñ êquñsang :[n:im:) imwņsminümü äíîñ¤áƒš
-iņináciu nájs ķu µmw äñjs is instru
+aj ŝi muzipo kimono juu
+niewiu:gai:máquumin ŝawñgwang g::m:1) imw@sminüü j
+IHņiūnínúiðu üís ķu x mw is ñ ñ lys ŠkunstwhUNNI
 HOSPITAL
-min:/Name
-: HENG VANNAT
-inti/Age
-: 35 Y, 1 D
-In 9/Gender
+in:/Name
+: Iñi ms
+nuus/Age
+:51 Y, 4 M, 12 D
+Ing/Gender
 : Male
 Patient ID
-: PT001772
+: PT002056
 Lab ID
-: LT001177
-in/Phone
-: 060991736
+: LT002576
+giữ g/Phone
+: 0889993244
 Requested Date
-11/03/2024 00:49
+: 30/08/2024 08:25
 Collected Date
-: 11/03/2024 09:09
+: 30/08/2024 08:32
 Analysis Date
-: 11/03/2024 09:09
+: 30/08/2024 08:32
+Requested By
+: Dr. Neak Bunteum
+LABORATORY REPORT
+BIOCHIMISTRY
+Results
+Unit
+Reference Range
+Flag
+Glucose
+:
+108
+mg/dL
+( 75-115)
+Cholesterole Total
+:
+189
+-
+mg/dL
+(0
+$200)
+Tryglyceride
+:
+143
+mg/dL
+(0
+- 150)
+Uric acide
+:
+6.7
+mg/dL
+(3.5 - 6.0)
+H
+Validated By:
+Lab Technician:
+e
+NAT
+2024-08-30 09:08
+2024-08-30 09:08
+mwwis: qûqniumi wřinéšu vynnjaw tagħjaw (vynwňanskunjonm 6 #1.8)
+: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
+spiimato
+6②
+seinaj les
+KV Hospital
+C₂
+K+
+aj ŝi muzipo kimono juu
+niewiu:gai:máquumin ŝawñgwang g::m:1) imw@sminüü j
+IHņiūnínúiðu üís ķu x mw is ñ ñ lys ŠkunstwhUNNI
+HOSPITAL
+in:/Name
+: Iñi ms
+nuus/Age
+:51 Y, 4 M, 12 D
+Ing/Gender
+: Male
+Patient ID
+: PT002056
+Lab ID
+: LT002576
+giữ g/Phone
+: 0889993244
+Requested Date
+: 30/08/2024 08:25
+Collected Date
+: 30/08/2024 08:32
+Analysis Date
+: 30/08/2024 08:32
 Requested By
 : Dr. Neak Bunteum
 LABORATORY REPORT
@@ -41,56 +110,62 @@ WBC
 (3.5-10.0)
 LYM%
 :
-38.0
-OP
+20.9
+응
 (15.0-50.0)
 MONO%
 :
-6.3
-09
+5.7
+응
 (2.0-15.0)
 NUE%
 :
-55.7
-%0
+73.4
+응
 (35.0-80.0)
 EOSINO%
 :
-15.5
+11.1
 응
 (11.5-16.5)
+H
+L
 BASO%
-: 29.3
-09
-25.0-35.0)
+: 20.2
+응
+(25.0-35.0)
+L
 HGB
 :
-36.5
+39.1
 g/dL
 (31.0-38.0)
+H
 MCH
 :
-5.30
+5.49
 pg
 (3.50-5.50)
 MCHC
 :
-80.2
+51.6
 g/dL
 (75.0-100.0)
+L
 RBC
-: 42.5
-x1012/L
+: 28.4
+X1012/L
 (35.0-55.0)
+L
 MCV
-: 335
+: 209
 fl
 (150-400)
 Validated By:
 Lab Technician:
-b
-the
-2024-03-11 09:12
-2024-03-11 09:12
-mawgs: qûqnfumi wjšinēšu vynnjaw tannjaw (oywňanskunjom 5 ñ.8)
-i₪açıšņ: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
+e
+NAT
+2024-08-30 09:08
+2024-08-30 09:08
+mwwis: qûqniumi wřinéšu vynnjaw tagħjaw (vynwňanskunjonm 6 #1.8)
+: 097 840 47 89/ 012 89 17 45/ 012 28 60 70

@@ -12,6 +12,9 @@ import os
 import tempfile
 from time import sleep
 
+_paddle_ocr_instance = None
+_kiri_ocr_instance = None
+
 
 def _read_env_value_from_dotenv(dotenv_path: str, key: str) -> Optional[str]:
     """Fallback loader for .env values when process environment is not exported."""
@@ -144,6 +147,72 @@ def _get_ollama_config() -> Dict[str, Any]:
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Anchor-based hospital detection & corrupted-label mappings
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Known hospital anchors — when detected, bypass OCR for header fields
+_HOSPITAL_ANCHORS: Dict[str, Dict[str, str]] = {
+    'KV Hospital': {
+        'hospital_name': 'KV Hospital',
+        'hospital_address': 'Phum Tuol Vihear, Khum Chirou Ti 2, Srok Tbong Khmum',
+        'hospital_slogan': '',
+    },
+}
+
+# Fuzzy label mapping: corrupted OCR labels → canonical field names
+_FUZZY_LABEL_MAP: Dict[str, str] = {
+    'in:/name':       'patient_name',
+    'ឈ្មោះ/name':     'patient_name',
+    'nu/age':         'age',
+    'អាយុ/agge':      'age',
+    'អាយុ/age':       'age',
+    'ing/gender':     'gender',
+    'ភេទ/gender':     'gender',
+    'paatient id':    'patient_id',
+    'laab id':        'lab_id',
+}
+
+
+def _detect_hospital_anchor(raw_text: str) -> Optional[str]:
+    """Detect which known hospital the OCR text belongs to.
+
+    Returns the anchor key (e.g. 'KV Hospital') or None.
+    """
+    text_lower = raw_text.lower()
+    for anchor_key in _HOSPITAL_ANCHORS:
+        # Match flexible OCR typos: 'KV Hospittall', 'KV Hospital', etc.
+        if anchor_key.lower().replace(' ', '') in text_lower.replace(' ', ''):
+            return anchor_key
+        # Also check for common OCR variants
+        variants = [anchor_key.lower(), anchor_key.lower().replace('hospital', 'hospittal'),
+                    anchor_key.lower().replace('hospital', 'hospittall')]
+        for v in variants:
+            if v in text_lower:
+                return anchor_key
+    return None
+
+
+def _apply_hospital_anchor_overrides(result: Dict[str, Any], anchor_key: str) -> Dict[str, Any]:
+    """Override hospital header fields with known-good values."""
+    overrides = _HOSPITAL_ANCHORS.get(anchor_key, {})
+    if not overrides:
+        return result
+
+    # For lab reports: patch labInfo or top-level fields
+    lab_info = result.get('labInfo', {})
+    patient_info = result.get('patientInfo', {})
+
+    # Set hospital name wherever the schema expects it
+    if 'hospital_name' in overrides:
+        result['hospital_name'] = overrides['hospital_name']
+        if lab_info:
+            lab_info['hospital_name'] = overrides['hospital_name']
+
+    print(f'DEBUG: Applied anchor overrides for "{anchor_key}"', file=sys.stderr)
+    return result
+
+
 def _build_llm_system_prompt(template: Dict[str, Any]) -> str:
     """Build the system prompt for the LLM extraction task."""
     schema = template.get('schema', {})
@@ -159,19 +228,42 @@ def _build_llm_system_prompt(template: Dict[str, Any]) -> str:
         "You are a medical lab report data extractor. "
         "Extract structured JSON from raw OCR text of Cambodian hospital lab reports.\n\n"
         "STRICT RULES:\n"
-        f"1. Flag values MUST be exactly one of {flag_enum} or null. No other values allowed.\n"
+        f"1. Flag values MUST be exactly one of {flag_enum} or null. "
+        "NEVER output 'NEGATIVE', 'POSITIVE', 'Normal', or any other string as a flag. "
+        "If the text says NEGATIVE, POSITIVE, POSITIVE (++), or has no flag, output null for the flag.\n"
         "2. All dates must be in DD/MM/YYYY HH:MM format exactly as they appear.\n"
-        "3. Patient ID format: PT followed by digits (e.g. PT00139).\n"
-        "4. Lab ID format: LT followed by digits (e.g. LT00001).\n"
+        "3. Patient ID format: PT followed by digits (e.g. PT00139). Fix OCR typos like 'Paatient' → 'Patient'.\n"
+        "4. Lab ID format: LT followed by digits (e.g. LT00001). Fix OCR typos like 'Laab' → 'Lab'.\n"
         "5. Patient name must be in English uppercase (e.g. HENG VANNAT).\n"
-        "6. Gender must be exactly 'Male' or 'Female'.\n"
+        "6. Gender must be exactly 'Male' or 'Female'. Fix OCR typos like 'Feemale' → 'Female'.\n"
         f"7. Test categories must be one of: {categories}\n"
         f"8. Ignore hospital phone numbers: {hospital_phones}\n"
-        "9. The OCR text may contain garbled Khmer Unicode characters before English labels "
-        "(e.g. 'កម់:/Name' means 'Name'). Extract the English value after the label.\n"
+        "\nFUZZY LABEL MAPPING (OCR frequently corrupts Khmer labels):\n"
+        "- Treat 'ឈ្មោះ/Name' or 'in:/Name' as Patient Name\n"
+        "- Treat 'អាយុ/Agge' or 'nu/Age' as Age\n"
+        "- Treat 'ភេទ/Gender' or 'Ing/Gender' as Gender\n"
+        "- Treat 'Paatient ID' as Patient ID\n"
+        "- Treat 'Laab ID' as Lab ID\n"
+        "- Treat 'Coollected Date' as Collected Date\n"
+        "- Extract the clean English value immediately after each label's colon.\n"
+        "\nENGLISH PRIORITY RULE:\n"
+        "- For physician names (Requested By, Validated By, Lab Technician), "
+        "ALWAYS extract the English text and ignore any garbled Khmer text nearby.\n"
+        "- Example: 'Requested By : Dr.. LEANG Choou' → extract 'Dr. LEANG Choeu' (fix double dots).\n"
+        "\nUNIT NORMALIZATION:\n"
+        "- Fix corrupted units: '응' → '%', '៖៖' → '%', 'dlL' → 'dL', 'dLL' → 'dL', "
+        "'dal' → 'dL', 'U/ZL' → 'U/L', 'U/zz' → 'U/L', '97ddL' → 'g/dL'.\n"
+        "- Preserve exact numeric values — do NOT round or recalculate.\n"
+        "\nADDITIONAL RULES:\n"
+        "9. The OCR text may contain garbled Khmer Unicode characters before English labels. "
+        "Extract the English value after the label.\n"
         "10. If a value cannot be determined from the text, use null.\n"
-        "11. For test results, extract the numeric value or NEGATIVE/POSITIVE exactly as shown.\n"
+        "11. For test results, extract the numeric value or NEGATIVE/POSITIVE as the result string, "
+        "but the FLAG must only be H, L, or null.\n"
         "12. 'BIOCHIMISTRY' is a misspelling of 'BIOCHEMISTRY' — normalize to 'BIOCHEMISTRY'.\n"
+        "13. 'ENNZYMOLOGY' is a misspelling of 'ENZYMOLOGY' — normalize to 'ENZYMOLOGY'.\n"
+        "14. Fix OCR double-character typos in test names: 'Chollesterole' → 'Cholesterol', "
+        "'Tryglyceride' → 'Triglyceride', 'Creatinine, , serum' → 'Creatinine, serum'.\n"
     )
 
 
@@ -370,7 +462,7 @@ def extract_with_llm(raw_text: str, template: Dict[str, Any]) -> Optional[Dict[s
         "stream": False,
         "options": {
             "temperature": 0,
-            "num_ctx": 8192,
+            "num_ctx": 4096,
         }
     }
 
@@ -399,6 +491,12 @@ def extract_with_llm(raw_text: str, template: Dict[str, Any]) -> Optional[Dict[s
         # Parse the JSON content from the LLM response
         result = json.loads(content) if isinstance(content, str) else content
         print(f'DEBUG: Ollama extracted {len(result.get("testResults", []))} test results', file=sys.stderr)
+
+        # ── Anchor-based post-processing ──
+        anchor_key = _detect_hospital_anchor(raw_text)
+        if anchor_key:
+            result = _apply_hospital_anchor_overrides(result, anchor_key)
+
         return result
 
     except http_requests.exceptions.ConnectionError:
@@ -474,28 +572,67 @@ def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
         all_tests = result.get('testResults', [])
 
     for test in all_tests:
-        # Flag normalization
+        # ── Strict Flag normalization (Task 4) ──
         flag = test.get('flag')
         if flag is not None:
-            flag_upper = str(flag).strip().upper()
-            if flag_upper in ('H', 'L'):
-                test['flag'] = flag_upper
+            flag_str = str(flag).strip().upper()
+            if flag_str in ('H', 'L'):
+                test['flag'] = flag_str
             else:
+                # NEGATIVE, POSITIVE, POSITIVE (++), Normal, empty, z, etc. → null
                 test['flag'] = None
         
-        # Unit normalization
+        # ── Unit normalization (Task 4) ──
         unit = test.get('unit')
         if unit:
-            unit = unit.replace('응', '%').replace('%0', '%').replace('0P', '%').replace('09', '%')
+            unit = (unit
+                    .replace('응', '%')
+                    .replace('៖៖', '%')
+                    .replace('៖', '%')
+                    .replace('%0', '%')
+                    .replace('0P', '%')
+                    .replace('09', '%')
+                    )
+            # Fix common OCR unit corruption
+            unit = re.sub(r'dl[Ll]', 'dL', unit)
+            unit = re.sub(r'dLL', 'dL', unit)
+            unit = re.sub(r'dal', 'dL', unit, flags=re.IGNORECASE)
+            unit = re.sub(r'U/[Zz][Ll]', 'U/L', unit)
+            unit = re.sub(r'U/zz', 'U/L', unit)
+            unit = re.sub(r'97ddL', 'g/dL', unit)
+            unit = re.sub(r'ddL', 'dL', unit)
             test['unit'] = unit
+
+        # ── Result normalization: strip OCR artifacts from numeric values ──
+        result_val = test.get('result')
+        if result_val and isinstance(result_val, str):
+            # Collapse errant spaces within decimal numbers: '0 . 7' → '0.7'
+            result_val = re.sub(r'(\d)\s*\.\s*(\d)', r'\1.\2', result_val)
+            # Collapse double dots: '31//03' stays as-is (date) but '0..7' → '0.7'
+            result_val = re.sub(r'(\d)\.{2,}(\d)', r'\1.\2', result_val)
+            test['result'] = result_val.strip()
             
-        # Reference range cleanup
+        # ── Reference range cleanup ──
         ref = test.get('referenceRange')
         if ref:
             # Strip $()$ LaTeX wrappers
             ref = re.sub(r'\$\(', '(', ref)
             ref = re.sub(r'\)\$', ')', ref)
+            # Collapse OCR double-dot artifacts: '40..0' → '40.0'
+            ref = re.sub(r'(\d)\.{2,}(\d)', r'\1.\2', ref)
+            # Collapse errant spaces: '0 - 200' is fine, '0 . 7' → '0.7'
+            ref = re.sub(r'(\d)\s*\.\s*(\d)', r'\1.\2', ref)
             test['referenceRange'] = ref
+
+        # ── Test name cleanup: fix OCR double-char typos ──
+        test_name = test.get('testName', '')
+        if test_name:
+            # Common OCR typos in test names
+            test_name = re.sub(r'Chollesterr?ole?', 'Cholesterol', test_name)
+            test_name = re.sub(r'Tryglyceride', 'Triglyceride', test_name)
+            test_name = re.sub(r'Creatinine,\s*,', 'Creatinine,', test_name)
+            test_name = re.sub(r'Uriic\s+accide', 'Uric Acid', test_name, flags=re.IGNORECASE)
+            test['testName'] = test_name.strip()
 
     # Patient ID format validation
     patient_info = result.get('patientInfo', {})
@@ -509,16 +646,31 @@ def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
     if lid and not re.match(r'^LT\d+$', str(lid)):
         lab_info['labId'] = None
 
-    # Gender normalization
+    # Gender normalization — handle OCR typos like 'Feemale'
     gender = patient_info.get('gender', '')
     if gender:
         gender_lower = str(gender).strip().lower()
-        if gender_lower in ('male', 'm'):
+        if gender_lower in ('male', 'm', 'maale', 'malle'):
             patient_info['gender'] = 'Male'
-        elif gender_lower in ('female', 'f'):
+        elif gender_lower in ('female', 'f', 'feemale', 'femaale', 'femalle'):
             patient_info['gender'] = 'Female'
         else:
             patient_info['gender'] = None
+
+    # ── Physician name cleanup: English priority (Task 3) ──
+    for field in ['requestedBy', 'validatedBy']:
+        name_val = lab_info.get(field, '')
+        if name_val and isinstance(name_val, str):
+            # Fix OCR double-dot: 'Dr..' → 'Dr.'
+            name_val = re.sub(r'\.{2,}', '.', name_val)
+            # Fix OCR double-letter typos in common titles
+            name_val = re.sub(r'Choou', 'Choeu', name_val)
+            # Strip any non-ASCII (garbled Khmer) from physician names
+            name_ascii = re.sub(r'[^\x00-\x7F]+', '', name_val).strip()
+            if name_ascii and len(name_ascii) > 3:
+                lab_info[field] = name_ascii
+            else:
+                lab_info[field] = name_val.strip()
 
     # Category normalization
     for test in result.get('testResults', []):
@@ -526,6 +678,7 @@ def validate_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
         if cat:
             cat_upper = str(cat).upper().strip()
             cat_upper = cat_upper.replace('BIOCHIMISTRY', 'BIOCHEMISTRY')
+            cat_upper = cat_upper.replace('ENNZYMOLOGY', 'ENZYMOLOGY')
             test['category'] = cat_upper
 
     # Strip empty string values → null
@@ -865,17 +1018,20 @@ def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
     except (TypeError, ValueError):
         pass
 
-    try:
-        ocr = PaddleOCR(**ocr_kwargs)
-    except TypeError:
-        # Backward/forward compatibility: if PaddleOCR signature changed, fall back to minimal init.
-        ocr = PaddleOCR(lang=paddle_config['language'])
+    global _paddle_ocr_instance
+    if _paddle_ocr_instance is None:
+        try:
+            _paddle_ocr_instance = PaddleOCR(**ocr_kwargs)
+        except TypeError:
+            # Backward/forward compatibility: if PaddleOCR signature changed, fall back to minimal init.
+            _paddle_ocr_instance = PaddleOCR(lang=paddle_config['language'])
 
-    print(
-        f'DEBUG: PaddleOCR initialized (requested_device={paddle_config.get("device")}, '
-        f'selected_device={selected_device}, use_gpu={use_gpu})',
-        file=sys.stderr,
-    )
+        print(
+            f'DEBUG: PaddleOCR initialized (requested_device={paddle_config.get("device")}, '
+            f'selected_device={selected_device}, use_gpu={use_gpu})',
+            file=sys.stderr,
+        )
+    ocr = _paddle_ocr_instance
 
     try:
         if mime_type == 'application/pdf':
@@ -935,8 +1091,15 @@ def process_with_paddle_ocr(file_path: str) -> Dict[str, Any]:
             print(f'DEBUG: Error clearing PaddlePaddle GPU memory: {e}', file=sys.stderr)
 
 
-def process_with_kiri_ocr(file_path: str) -> Dict[str, Any]:
-    """Extract text from document using Kiri OCR (Khmer-specialized transformer model)."""
+def process_with_kiri_ocr(file_path: str, max_pages: Optional[int] = None) -> Dict[str, Any]:
+    """Extract text from document using Kiri OCR (Khmer-specialized transformer model).
+
+    Args:
+        file_path: Path to the document file.
+        max_pages: If set, only process the first N pages of a PDF.
+                   Use max_pages=1 for lab reports (demographics are on page 1).
+                   Use None for consultation docs (Khmer text throughout).
+    """
     try:
         from kiri_ocr import OCR as KiriOCR
     except ImportError as import_error:
@@ -945,9 +1108,12 @@ def process_with_kiri_ocr(file_path: str) -> Dict[str, Any]:
     kiri_config = _get_kiri_config()
     mime_type = _infer_mime_type(file_path)
 
-    # Initialize Kiri OCR with configured decode method
-    decode_method = kiri_config.get('decode_method', 'accurate')
-    ocr = KiriOCR(decode_method=decode_method)
+    global _kiri_ocr_instance
+    if _kiri_ocr_instance is None:
+        decode_method = kiri_config.get('decode_method', 'accurate')
+        _kiri_ocr_instance = KiriOCR(decode_method=decode_method)
+    
+    ocr = _kiri_ocr_instance
 
     try:
         if mime_type == 'application/pdf':
@@ -958,11 +1124,16 @@ def process_with_kiri_ocr(file_path: str) -> Dict[str, Any]:
                 raise Exception('PyMuPDF is required for PDF + Kiri OCR flow') from import_error
 
             doc = fitz.open(file_path)
+            total_pages = len(doc)
+            pages_to_process = min(total_pages, max_pages) if max_pages else total_pages
             all_text: List[str] = []
             all_results: List[Dict[str, Any]] = []
             page_confidences: List[float] = []
 
-            for page_num in range(len(doc)):
+            if max_pages and max_pages < total_pages:
+                print(f'DEBUG: Kiri OCR processing {pages_to_process}/{total_pages} pages (first-page-only mode)', file=sys.stderr)
+
+            for page_num in range(pages_to_process):
                 page = doc.load_page(page_num)
                 pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
                 temp_img_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
@@ -1008,15 +1179,9 @@ def process_with_kiri_ocr(file_path: str) -> Dict[str, Any]:
             'page_confidences': [avg_confidence],
         }
     finally:
-        try:
-            del ocr
-            import gc
-            gc.collect()
-            import torch
-            torch.cuda.empty_cache()
-            print('DEBUG: PyTorch GPU memory cleared', file=sys.stderr)
-        except Exception as e:
-            print(f'DEBUG: Error clearing PyTorch GPU memory: {e}', file=sys.stderr)
+        # Keep _kiri_ocr_instance alive for reuse across files in a batch.
+        # The global singleton pattern already prevents re-loading.
+        pass
 
 
 def _detect_line_script(text: str) -> str:
@@ -2031,15 +2196,20 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
                 except Exception as paddle_error:
                     print(f'DEBUG: PaddleOCR failed ({paddle_error})', file=sys.stderr)
 
-                if document_type != 'consultation':
-                    # Run Kiri OCR (best for Khmer script text)
+                if document_type == 'consultation':
+                    # Consultation docs: run Kiri OCR on ALL pages (Khmer text throughout)
                     try:
                         kiri_result = process_with_kiri_ocr(file_path)
-                        print(f'DEBUG: Kiri OCR pass — {len(kiri_result["text"])} chars, confidence {kiri_result["confidence"]:.3f}', file=sys.stderr)
+                        print(f'DEBUG: Kiri OCR pass (full) — {len(kiri_result["text"])} chars, confidence {kiri_result["confidence"]:.3f}', file=sys.stderr)
                     except Exception as kiri_error:
                         print(f'DEBUG: Kiri OCR failed ({kiri_error})', file=sys.stderr)
                 else:
-                    print(f'DEBUG: Skipping Kiri OCR for consultation document', file=sys.stderr)
+                    # Lab reports: run Kiri OCR on FIRST PAGE ONLY (patient demographics/Khmer names)
+                    try:
+                        kiri_result = process_with_kiri_ocr(file_path, max_pages=1)
+                        print(f'DEBUG: Kiri OCR pass (page 1 only) — {len(kiri_result["text"])} chars, confidence {kiri_result["confidence"]:.3f}', file=sys.stderr)
+                    except Exception as kiri_error:
+                        print(f'DEBUG: Kiri OCR failed ({kiri_error})', file=sys.stderr)
 
                 # Fuse results from both engines
                 if paddle_result and kiri_result:
@@ -2178,7 +2348,7 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
             }
         }
 
-def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = None, template: Optional[Dict[str, Any]] = None, document_type: Optional[str] = None) -> List[Dict[str, Any]]:
+def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = None, template: Optional[Dict[str, Any]] = None, document_type: Optional[str] = None, stream: bool = False):
     # When using LLM, serialize to avoid GPU contention
     if template and max_workers is None:
         max_workers = 1
@@ -2191,20 +2361,28 @@ def process_batch_parallel(file_paths: List[str], max_workers: Optional[int] = N
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_file = {executor.submit(process_single_file, fp, template, document_type): fp for fp in file_paths}
         for future in concurrent.futures.as_completed(future_to_file):
+            file_path = future_to_file[future]
             try:
                 result = future.result()
-                results.append(result)
+                if stream:
+                    print(json.dumps([result], ensure_ascii=False), flush=True)
+                else:
+                    results.append(result)
                 print(f'DEBUG: Completed {result.get("source_file", "unknown")} via {result.get("extraction_method", "unknown")}', file=sys.stderr)
             except Exception as e:
-                file_path = future_to_file[future]
-                results.append({
+                err_result = {
                     'source_file': os.path.basename(file_path),
                     'error': str(e),
                     'success': False
-                })
+                }
+                if stream:
+                    print(json.dumps([err_result], ensure_ascii=False), flush=True)
+                else:
+                    results.append(err_result)
     total_time = time.time() - start_time
     print(f'DEBUG: Batch processing completed in {total_time:.3f} seconds', file=sys.stderr)
-    return results
+    if not stream:
+        return results
 
 def main():
     parser = argparse.ArgumentParser(description='Smart OCR Intelligence Layer — PaddleOCR + Ollama LLM')
@@ -2217,6 +2395,7 @@ def main():
     parser.add_argument('--output-file', help='Output file (default: stdout)')
     parser.add_argument('--template', help='Path to JSON file with report template for LLM extraction')
     parser.add_argument('--document-type', choices=['lab_report', 'consultation'], help='Type of document to guide processing')
+    parser.add_argument('--stream', action='store_true', help='Stream results as JSON lines immediately when finished')
     args = parser.parse_args()
 
     # Load template if provided
@@ -2242,20 +2421,22 @@ def main():
             print(f'DEBUG: Found {len(file_paths)} files to process', file=sys.stderr)
             if not file_paths:
                 raise Exception(f'No supported files (PDF/Image/TXT) found in {batch_dir}')
-            results = process_batch_parallel(file_paths, args.workers, template, args.document_type)
+            results = process_batch_parallel(file_paths, args.workers, template, args.document_type, args.stream)
         elif args.file_list:
             with open(args.file_list, 'r') as f:
                 file_paths = [line.strip() for line in f if line.strip()]
-            results = process_batch_parallel(file_paths, args.workers, template, args.document_type)
-        if args.output_format == 'json':
-            output = json.dumps(results, ensure_ascii=False)
-        else:
-            output = json.dumps(results, ensure_ascii=False, indent=2)
-        if args.output_file:
-            with open(args.output_file, 'w', encoding='utf-8') as f:
-                f.write(output)
-        else:
-            sys.stdout.buffer.write(output.encode('utf-8'))
+            results = process_batch_parallel(file_paths, args.workers, template, args.document_type, args.stream)
+        
+        if not args.stream:
+            if args.output_format == 'json':
+                output = json.dumps(results, ensure_ascii=False)
+            else:
+                output = json.dumps(results, ensure_ascii=False, indent=2)
+            if args.output_file:
+                with open(args.output_file, 'w', encoding='utf-8') as f:
+                    f.write(output)
+            else:
+                sys.stdout.buffer.write(output.encode('utf-8'))
     except Exception as e:
         error_msg = f'Error: {e}'
         sys.stderr.buffer.write(error_msg.encode('utf-8'))

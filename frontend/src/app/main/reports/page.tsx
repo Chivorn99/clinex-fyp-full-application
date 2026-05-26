@@ -198,10 +198,23 @@ export default function ReportsPage() {
         }
     }
 
-    // Fetch reports on component mount
+    // Fetch reports on component mount and set up polling
     useEffect(() => {
         fetchReports()
     }, [])
+
+    // Poll for updates if any report is processing
+    useEffect(() => {
+        const hasProcessing = reports.some(r => r.status === 'processing')
+        
+        if (hasProcessing) {
+            const interval = setInterval(() => {
+                fetchReports()
+            }, 5000) // Poll every 5 seconds
+            
+            return () => clearInterval(interval)
+        }
+    }, [reports])
 
     const filteredReports = reports.filter(report => {
         const matchesSearch = report.fileName.toLowerCase().includes(searchQuery.toLowerCase()) ||
