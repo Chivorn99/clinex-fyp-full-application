@@ -1,31 +1,31 @@
+sģinaj les
 spiimato
 6②
-seinaj les
 KV Hospital
 C₂
 K+
-aj ŝi muzipo kimono juu
-niewiu:gai:máquumin ŝawñgwang g::m:1) imw@sminüü j
+ñ§âj ŝknpmmññéiel nɲmññy:wwmuzikpn škilm:ġñonciná vgjunnninnkninu
+niewiu:gai:máquumïn ŝajuñgane g:p:im:]simwsminümü sjś
 IHņiūnínúiðu üís ķu x mw is ñ ñ lys ŠkunstwhUNNI
 HOSPITAL
 in:/Name
-: Iñi ms
+: ws
 nuus/Age
-:51 Y, 4 M, 12 D
+: 28 Y, 4 D
 Ing/Gender
 : Male
 Patient ID
-: PT002056
+: PT001985
 Lab ID
-: LT002576
+: LT001319
 giữ g/Phone
-: 0889993244
+: 0882562633
 Requested Date
-: 30/08/2024 08:25
+: 27/03/2024 16:11
 Collected Date
-: 30/08/2024 08:32
+: 29/03/2024 10:11
 Analysis Date
-: 30/08/2024 08:32
+: 29/03/2024 10:11
 Requested By
 : Dr. Neak Bunteum
 LABORATORY REPORT
@@ -34,69 +34,19 @@ Results
 Unit
 Reference Range
 Flag
-Glucose
+Creatinine, serum
 :
-108
+13.2
 mg/dL
-( 75-115)
-Cholesterole Total
-:
-189
--
-mg/dL
-(0
-$200)
-Tryglyceride
-:
-143
-mg/dL
-(0
-- 150)
-Uric acide
-:
-6.7
-mg/dL
-(3.5 - 6.0)
+(0.9
+1.1)
 H
-Validated By:
-Lab Technician:
-e
-NAT
-2024-08-30 09:08
-2024-08-30 09:08
-mwwis: qûqniumi wřinéšu vynnjaw tagħjaw (vynwňanskunjonm 6 #1.8)
-: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
-spiimato
-6②
-seinaj les
-KV Hospital
-C₂
-K+
-aj ŝi muzipo kimono juu
-niewiu:gai:máquumin ŝawñgwang g::m:1) imw@sminüü j
-IHņiūnínúiðu üís ķu x mw is ñ ñ lys ŠkunstwhUNNI
-HOSPITAL
-in:/Name
-: Iñi ms
-nuus/Age
-:51 Y, 4 M, 12 D
-Ing/Gender
-: Male
-Patient ID
-: PT002056
-Lab ID
-: LT002576
-giữ g/Phone
-: 0889993244
-Requested Date
-: 30/08/2024 08:25
-Collected Date
-: 30/08/2024 08:32
-Analysis Date
-: 30/08/2024 08:32
-Requested By
-: Dr. Neak Bunteum
-LABORATORY REPORT
+Urea/BUN
+:
+142
+mg/dL
+(6.0 40.0 )
+H
 HEMATOLOGY
 Results
 Unit
@@ -105,67 +55,64 @@ Flag
 CBC
 WBC
 :
-7.6
+5.7
 10⁹/L
 (3.5-10.0)
 LYM%
 :
-20.9
+22.8
 응
 (15.0-50.0)
 MONO%
 :
-5.7
+6.5
 응
 (2.0-15.0)
 NUE%
-:
-73.4
+: 70.7
 응
 (35.0-80.0)
 EOSINO%
-:
-11.1
+: 9.0
 응
 (11.5-16.5)
-H
 L
 BASO%
-: 20.2
+:
+27.7
 응
 (25.0-35.0)
-L
 HGB
 :
-39.1
+37.0
 g/dL
 (31.0-38.0)
-H
 MCH
 :
-5.49
+3.24
 pg
 (3.50-5.50)
+L
 MCHC
 :
-51.6
+75.0
 g/dL
 (75.0-100.0)
-L
 RBC
-: 28.4
+: 24.3
 X1012/L
 (35.0-55.0)
 L
 MCV
-: 209
+:
+200
 fl
 (150-400)
 Validated By:
 Lab Technician:
-e
-NAT
-2024-08-30 09:08
-2024-08-30 09:08
-mwwis: qûqniumi wřinéšu vynnjaw tagħjaw (vynwňanskunjonm 6 #1.8)
+b
+is
+2024-03-29 10:15
+2024-03-29 10:15
+mawhs: qûqniumi wžinéšu [ñġjaw iaġnjaw (vynwñanskunjnm b ñ.8)
 : 097 840 47 89/ 012 89 17 45/ 012 28 60 70

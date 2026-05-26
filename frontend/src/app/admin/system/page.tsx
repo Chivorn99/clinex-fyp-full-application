@@ -331,6 +331,21 @@ export default function SystemPage() {
               >
                 {health?.queue?.failed_jobs ?? 0}
               </p>
+              {(health?.queue?.failed_jobs ?? 0) > 0 && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await apiClient.delete("/admin/flush-failed-jobs");
+                      fetchHealth(true);
+                    } catch (err) {
+                      console.error("Failed to flush:", err);
+                    }
+                  }}
+                  className="mt-1.5 text-xs text-red-500 hover:text-red-700 underline cursor-pointer"
+                >
+                  Clear All
+                </button>
+              )}
             </div>
           </div>
         </div>

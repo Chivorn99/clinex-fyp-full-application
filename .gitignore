@@ -21,3 +21,4 @@ ops/nginx/certs/*.key
 backend/scripts/python/test_ocr_kv.txt
 backend/extracted_text.txt
 backend/extracted_text.txt
+backend/extracted_text.txt

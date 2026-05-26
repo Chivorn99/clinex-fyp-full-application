@@ -118,11 +118,13 @@ def _get_kiri_config() -> Dict[str, Any]:
     enabled = get_config_value('KIRI_OCR_ENABLED', 'false').lower() in ('true', '1', 'yes')
     decode_method = get_config_value('KIRI_OCR_DECODE_METHOD', 'accurate')
     confidence_threshold = float(get_config_value('KIRI_OCR_CONFIDENCE_THRESHOLD', '0.7'))
+    device = get_config_value('KIRI_OCR_DEVICE', 'auto').strip().lower()
 
     return {
         'enabled': enabled,
         'decode_method': decode_method,
         'confidence_threshold': confidence_threshold,
+        'device': device,
     }
 
 
@@ -1108,10 +1110,23 @@ def process_with_kiri_ocr(file_path: str, max_pages: Optional[int] = None) -> Di
     kiri_config = _get_kiri_config()
     mime_type = _infer_mime_type(file_path)
 
+    # Force Kiri OCR to CPU if configured (reserve GPU for Ollama LLM)
+    kiri_device = kiri_config.get('device', 'auto')
+    if kiri_device == 'cpu':
+        import torch
+        if torch.cuda.is_available():
+            print('DEBUG: Kiri OCR forced to CPU mode (KIRI_OCR_DEVICE=cpu) — GPU reserved for LLM', file=sys.stderr)
+        # Force PyTorch to use CPU by setting device before model loads
+        os.environ['CUDA_VISIBLE_DEVICES'] = ''
+
     global _kiri_ocr_instance
     if _kiri_ocr_instance is None:
         decode_method = kiri_config.get('decode_method', 'accurate')
         _kiri_ocr_instance = KiriOCR(decode_method=decode_method)
+        # Restore CUDA_VISIBLE_DEVICES after model is loaded on CPU
+        if kiri_device == 'cpu' and 'CUDA_VISIBLE_DEVICES' in os.environ:
+            if os.environ['CUDA_VISIBLE_DEVICES'] == '':
+                del os.environ['CUDA_VISIBLE_DEVICES']
     
     ocr = _kiri_ocr_instance
 

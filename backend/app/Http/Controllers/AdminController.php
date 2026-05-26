@@ -357,11 +357,32 @@ class AdminController extends Controller
             ];
         }
 
-        // Queue check
+        // Queue check — accurate real-time stats
+        $pendingJobs = 0;
+        $processingJobs = 0;
+        $failedJobs = DB::table('failed_jobs')->count();
+
+        // Count pending jobs from the Redis queue
+        try {
+            $pendingJobs = \Illuminate\Support\Facades\Queue::size();
+        } catch (\Exception $e) {
+            // Redis unavailable — try database jobs table as fallback
+            try {
+                $pendingJobs = DB::table('jobs')->count();
+            } catch (\Exception $e2) {
+                $pendingJobs = 0;
+            }
+        }
+
+        // Count actively processing batches (more accurate than queue size)
+        $processingBatches = ReportBatch::where('status', 'processing')->count();
+        $processingReports = LabReport::where('status', 'processing')->count();
+        $processingJobs = $processingBatches + $processingReports;
+
         $health['queue'] = [
-            'pending_jobs'    => \Illuminate\Support\Facades\Queue::size(),
-            'failed_jobs'     => DB::table('failed_jobs')->count(),
-            'processing_jobs' => 0, // Using Queue size for pending
+            'pending_jobs'    => $pendingJobs,
+            'failed_jobs'     => $failedJobs,
+            'processing_jobs' => $processingJobs,
         ];
 
         // Disk usage
@@ -404,5 +425,20 @@ class AdminController extends Controller
         $pow = $bytes > 0 ? floor(log($bytes, 1024)) : 0;
         $pow = min($pow, count($units) - 1);
         return round($bytes / (1024 ** $pow), $precision) . ' ' . $units[$pow];
+    }
+
+    /**
+     * Flush all failed jobs from the failed_jobs table.
+     */
+    public function flushFailedJobs(): JsonResponse
+    {
+        $count = DB::table('failed_jobs')->count();
+        DB::table('failed_jobs')->truncate();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Cleared {$count} failed job(s).",
+            'cleared' => $count,
+        ]);
     }
 }

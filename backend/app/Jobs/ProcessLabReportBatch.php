@@ -109,6 +109,10 @@ class ProcessLabReportBatch implements ShouldQueue
                 'PADDLE_OCR_CONFIDENCE_THRESHOLD' => env('PADDLE_OCR_CONFIDENCE_THRESHOLD', '0.85'),
                 'PADDLE_OCR_DEVICE' => env('PADDLE_OCR_DEVICE', 'auto'),
                 'PADDLE_OCR_GPU_ID' => env('PADDLE_OCR_GPU_ID', '0'),
+                'KIRI_OCR_ENABLED' => env('KIRI_OCR_ENABLED', 'false'),
+                'KIRI_OCR_DECODE_METHOD' => env('KIRI_OCR_DECODE_METHOD', 'accurate'),
+                'KIRI_OCR_CONFIDENCE_THRESHOLD' => env('KIRI_OCR_CONFIDENCE_THRESHOLD', '0.7'),
+                'KIRI_OCR_DEVICE' => env('KIRI_OCR_DEVICE', 'auto'),
                 'OLLAMA_ENABLED' => env('OLLAMA_ENABLED', 'false'),
                 'OLLAMA_HOST' => env('OLLAMA_HOST', 'http://ollama:11434'),
                 'OLLAMA_MODEL' => env('OLLAMA_MODEL', 'phi3:mini'),
@@ -150,6 +154,15 @@ class ProcessLabReportBatch implements ShouldQueue
             $this->markBatchCompleted();
 
         } catch (\Exception $e) {
+            // Mark any still-processing reports as failed
+            $this->reportBatch->labReports()
+                ->where('status', 'processing')
+                ->update([
+                    'status' => 'failed',
+                    'processing_error' => 'Batch failed: ' . $e->getMessage(),
+                    'processed_at' => now(),
+                ]);
+
             $this->reportBatch->update([
                 'status' => 'failed',
                 'processing_completed_at' => now()
@@ -162,6 +175,31 @@ class ProcessLabReportBatch implements ShouldQueue
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * Handle a job failure (timeout, out-of-memory, queue worker kill, etc.)
+     */
+    public function failed(?\Throwable $exception): void
+    {
+        // Clean up any reports still stuck as 'processing'
+        $this->reportBatch->labReports()
+            ->where('status', 'processing')
+            ->update([
+                'status' => 'failed',
+                'processing_error' => 'Job failed: ' . ($exception ? $exception->getMessage() : 'Unknown error'),
+                'processed_at' => now(),
+            ]);
+
+        $this->reportBatch->update([
+            'status' => 'failed',
+            'processing_completed_at' => now(),
+        ]);
+
+        Log::error('ProcessLabReportBatch job failed', [
+            'batch_id' => $this->reportBatch->id,
+            'error' => $exception ? $exception->getMessage() : 'Unknown',
+        ]);
     }
 
     private function processReportResult(LabReport $report, array $result)
@@ -226,6 +264,25 @@ class ProcessLabReportBatch implements ShouldQueue
 
     private function markBatchCompleted()
     {
+        // Catch any orphaned reports still stuck as 'processing'
+        // (e.g. Python didn't return a result line for them)
+        $orphanedReports = $this->reportBatch->labReports()
+            ->where('status', 'processing')
+            ->get();
+
+        foreach ($orphanedReports as $orphan) {
+            $orphan->update([
+                'status' => 'failed',
+                'processing_error' => 'No result received from OCR pipeline',
+                'processed_at' => now(),
+            ]);
+            $this->reportBatch->increment('failed_reports');
+            Log::warning('Orphaned processing report marked as failed', [
+                'report_id' => $orphan->id,
+                'batch_id' => $this->reportBatch->id,
+            ]);
+        }
+
         $this->reportBatch->refresh();
         $finalStatus = ($this->reportBatch->failed_reports > 0 && $this->reportBatch->processed_reports == 0) 
             ? 'failed' 
