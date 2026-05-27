@@ -1,118 +1,56 @@
-sģinaj les
 spiimato
 6②
+seinaj les
 KV Hospital
 C₂
 K+
-ñ§âj ŝknpmmññéiel nɲmññy:wwmuzikpn škilm:ġñonciná vgjunnninnkninu
-niewiu:gai:máquumïn ŝajuñgane g:p:im:]simwsminümü sjś
+aj ŝi muzipo kimono juu
+niewiu:gai:máquumin ŝawñgwang g::m:1) imw@sminüü j
 IHņiūnínúiðu üís ķu x mw is ñ ñ lys ŠkunstwhUNNI
 HOSPITAL
 in:/Name
-: ws
-nuus/Age
-: 28 Y, 4 D
+: cu inm
+nuis/Age
+:45 Y
 Ing/Gender
 : Male
+own
 Patient ID
-: PT001985
+: PT001884
 Lab ID
-: LT001319
-giữ g/Phone
-: 0882562633
+: LT001244
+ging/Phone
+: 0716666598
 Requested Date
-: 27/03/2024 16:11
+: 19/03/2024 08:56
 Collected Date
-: 29/03/2024 10:11
+: 19/03/2024 09:45
 Analysis Date
-: 29/03/2024 10:11
+: 19/03/2024 09:45
 Requested By
-: Dr. Neak Bunteum
+: Dr. Ou Kimling
 LABORATORY REPORT
 BIOCHIMISTRY
 Results
 Unit
 Reference Range
 Flag
-Creatinine, serum
+Glucose
 :
-13.2
+105
 mg/dL
-(0.9
-1.1)
-H
-Urea/BUN
-:
-142
-mg/dL
-(6.0 40.0 )
-H
-HEMATOLOGY
-Results
-Unit
-Reference Range
-Flag
-CBC
-WBC
-:
-5.7
-10⁹/L
-(3.5-10.0)
-LYM%
-:
-22.8
-응
-(15.0-50.0)
-MONO%
+( 75-115)
+Hb-Alc
 :
 6.5
 응
-(2.0-15.0)
-NUE%
-: 70.7
-응
-(35.0-80.0)
-EOSINO%
-: 9.0
-응
-(11.5-16.5)
-L
-BASO%
-:
-27.7
-응
-(25.0-35.0)
-HGB
-:
-37.0
-g/dL
-(31.0-38.0)
-MCH
-:
-3.24
-pg
-(3.50-5.50)
-L
-MCHC
-:
-75.0
-g/dL
-(75.0-100.0)
-RBC
-: 24.3
-X1012/L
-(35.0-55.0)
-L
-MCV
-:
-200
-fl
-(150-400)
+(4.0 - 6.0)
+H
 Validated By:
 Lab Technician:
 b
 is
-2024-03-29 10:15
-2024-03-29 10:15
+2024-03-19 09:47
+2024-03-19 09:47
 mawhs: qûqniumi wžinéšu [ñġjaw iaġnjaw (vynwñanskunjnm b ñ.8)
 : 097 840 47 89/ 012 89 17 45/ 012 28 60 70
