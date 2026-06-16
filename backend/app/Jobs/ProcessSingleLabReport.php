@@ -31,9 +31,18 @@ class ProcessSingleLabReport implements ShouldQueue
             // Update status to processing
             $this->labReport->update(['status' => 'processing']);
 
-            // Get file path
-            $filePath = Storage::disk('private')->path($this->labReport->storage_path);
-            
+            // Get file path — handle both local and S3/Spaces storage
+            $storagePath = $this->labReport->storage_path;
+            $isS3 = config('filesystems.disks.private.driver') === 's3';
+
+            if ($isS3) {
+                // S3/Spaces: download to a temp file for the Python OCR script
+                $filePath = storage_path('app/tmp_' . $this->labReport->id . '_' . basename($storagePath));
+                file_put_contents($filePath, Storage::disk('private')->get($storagePath));
+            } else {
+                $filePath = Storage::disk('private')->path($storagePath);
+            }
+
             if (!file_exists($filePath)) {
                 throw new \Exception("File not found: {$filePath}");
             }
@@ -109,6 +118,11 @@ class ProcessSingleLabReport implements ShouldQueue
             // Clean up temp template file
             if ($templateFile && file_exists($templateFile)) {
                 unlink($templateFile);
+            }
+
+            // Clean up temp S3 download file
+            if (isset($isS3) && $isS3 && isset($filePath) && file_exists($filePath)) {
+                @unlink($filePath);
             }
 
             if (empty($output)) {

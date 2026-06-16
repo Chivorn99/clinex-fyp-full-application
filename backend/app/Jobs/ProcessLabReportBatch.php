@@ -52,10 +52,21 @@ class ProcessLabReportBatch implements ShouldQueue
 
             $filePaths = [];
             $reportMap = []; // map filename to LabReport
-            
+            $tempS3Files = []; // track temp files for S3 cleanup
+            $isS3 = config('filesystems.disks.private.driver') === 's3';
+
             foreach ($reports as $report) {
                 $report->update(['status' => 'processing']);
-                $absolutePath = Storage::disk('private')->path($report->storage_path);
+
+                if ($isS3) {
+                    // S3/Spaces: download to a temp file for the Python OCR script
+                    $absolutePath = storage_path('app/tmp_' . $report->id . '_' . basename($report->storage_path));
+                    file_put_contents($absolutePath, Storage::disk('private')->get($report->storage_path));
+                    $tempS3Files[] = $absolutePath;
+                } else {
+                    $absolutePath = Storage::disk('private')->path($report->storage_path);
+                }
+
                 $filePaths[] = $absolutePath;
                 $reportMap[basename($absolutePath)] = $report;
             }
@@ -150,6 +161,11 @@ class ProcessLabReportBatch implements ShouldQueue
             // Clean up
             @unlink($fileListPath);
             if ($templateFile) @unlink($templateFile);
+
+            // Clean up temp S3 download files
+            foreach ($tempS3Files as $tmpFile) {
+                @unlink($tmpFile);
+            }
 
             $this->markBatchCompleted();
 

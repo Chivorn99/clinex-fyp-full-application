@@ -125,3 +125,49 @@ docker-intranet-logs:
 
 docker-intranet-migrate:
 	@$(COMPOSE_INTRAnet) exec backend php artisan migrate
+
+# ── Cloud: Droplet 1 — Web + Database (clinex.live) ──
+COMPOSE_WEB = docker compose -f docker-compose.cloud-web.yml
+
+docker-web-up:
+	@make docker-intranet-cert
+	@$(COMPOSE_WEB) up -d --build
+
+docker-web-down:
+	@$(COMPOSE_WEB) down
+
+docker-web-logs:
+	@$(COMPOSE_WEB) logs -f
+
+docker-web-migrate:
+	@$(COMPOSE_WEB) exec backend php artisan migrate --force
+
+docker-web-seed:
+	@$(COMPOSE_WEB) exec backend php artisan db:seed --force
+
+docker-web-shell:
+	@$(COMPOSE_WEB) exec backend sh
+
+docker-web-restart:
+	@$(COMPOSE_WEB) restart
+
+# ── Cloud: Droplet 2 — AI Engine + Queue Worker ──
+COMPOSE_AI = docker compose -f docker-compose.cloud-ai.yml
+
+docker-ai-up:
+	@$(COMPOSE_AI) up -d --build
+
+docker-ai-down:
+	@$(COMPOSE_AI) down
+
+docker-ai-logs:
+	@$(COMPOSE_AI) logs -f
+
+docker-ai-pull-model:
+	@$(COMPOSE_AI) exec ollama ollama pull phi3:mini
+
+docker-ai-shell:
+	@$(COMPOSE_AI) exec queue sh
+
+docker-ai-restart:
+	@$(COMPOSE_AI) restart
