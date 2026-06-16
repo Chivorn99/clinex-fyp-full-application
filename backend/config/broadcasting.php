@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'default' => env('BROADCAST_DRIVER', 'reverb'),
+    'default' => env('BROADCAST_CONNECTION', env('BROADCAST_DRIVER', 'log')),
 
     /*
     |--------------------------------------------------------------------------
