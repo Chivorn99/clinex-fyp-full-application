@@ -205,7 +205,7 @@ export default function ReportDetailsPage() {
             setIsExportingCsv(true)
             // Use fetch for blob response
             const token = localStorage.getItem('auth_token')
-            const fetchResponse = await fetch(`http://localhost:8000/api/lab-reports/export/verified-csv?report_id=${reportId}`, {
+            const fetchResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/lab-reports/export/verified-csv?report_id=${reportId}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'text/csv',
