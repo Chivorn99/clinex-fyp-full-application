@@ -46,11 +46,17 @@ class DocumentAiService
             $credentialsPath = $this->resolveCredentialsPath($configuredCredentialsPath);
 
             if (!$projectId || !$location || !$processorId) {
-                throw new \Exception('Google Cloud project_id, location, and processor_id must be configured in config/services.php');
+                Log::warning('DocumentAiService: Google Cloud not configured — Document AI features will be unavailable.');
+                $this->client = null;
+                $this->processorName = null;
+                return;
             }
 
             if (!$credentialsPath || !file_exists($credentialsPath)) {
-                throw new \Exception("Google Cloud credentials file not found at: {$credentialsPath}");
+                Log::warning("DocumentAiService: Credentials file not found at: {$credentialsPath} — Document AI features will be unavailable.");
+                $this->client = null;
+                $this->processorName = null;
+                return;
             }
 
             $clientOptions = [
