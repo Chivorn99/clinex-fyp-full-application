@@ -336,25 +336,35 @@ class AdminController extends Controller
         }
 
         // Ollama check
+        $ollamaEnabled = filter_var(env('OLLAMA_ENABLED', false), FILTER_VALIDATE_BOOLEAN);
         $ollamaHost = env('OLLAMA_HOST', 'http://ollama:11434');
-        try {
-            $response = Http::timeout(5)->get("{$ollamaHost}/api/tags");
-            $models = $response->successful() ? $response->json('models', []) : [];
+
+        if (!$ollamaEnabled) {
             $health['ollama'] = [
-                'status' => $response->successful() ? 'healthy' : 'unhealthy',
+                'status' => 'disabled',
                 'host' => $ollamaHost,
-                'models' => array_map(fn($m) => [
-                    'name' => $m['name'] ?? 'unknown',
-                    'size' => $m['size'] ?? 0,
-                ], $models),
-                'model_count' => count($models),
+                'message' => 'LLM post-processing is not enabled for this deployment.',
             ];
-        } catch (\Exception $e) {
-            $health['ollama'] = [
-                'status' => 'unhealthy',
-                'host' => $ollamaHost,
-                'error' => 'Could not connect to Ollama: ' . $e->getMessage(),
-            ];
+        } else {
+            try {
+                $response = Http::timeout(5)->get("{$ollamaHost}/api/tags");
+                $models = $response->successful() ? $response->json('models', []) : [];
+                $health['ollama'] = [
+                    'status' => $response->successful() ? 'healthy' : 'unhealthy',
+                    'host' => $ollamaHost,
+                    'models' => array_map(fn($m) => [
+                        'name' => $m['name'] ?? 'unknown',
+                        'size' => $m['size'] ?? 0,
+                    ], $models),
+                    'model_count' => count($models),
+                ];
+            } catch (\Exception $e) {
+                $health['ollama'] = [
+                    'status' => 'unhealthy',
+                    'host' => $ollamaHost,
+                    'error' => 'Could not connect to Ollama: ' . $e->getMessage(),
+                ];
+            }
         }
 
         // Queue check — accurate real-time stats

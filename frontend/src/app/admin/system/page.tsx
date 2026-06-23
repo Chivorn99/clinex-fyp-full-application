@@ -32,6 +32,7 @@ interface SystemHealth {
     models?: OllamaModel[];
     model_count?: number;
     error?: string;
+    message?: string;
   };
   queue: {
     pending_jobs: number;
@@ -92,6 +93,8 @@ export default function SystemPage() {
         return <CheckCircle2 className="h-5 w-5 text-emerald-500" />;
       case "unhealthy":
         return <XCircle className="h-5 w-5 text-red-500" />;
+      case "disabled":
+        return <Clock className="h-5 w-5 text-gray-400" />;
       default:
         return <AlertTriangle className="h-5 w-5 text-amber-500" />;
     }
@@ -103,6 +106,8 @@ export default function SystemPage() {
         return "border-emerald-200 bg-emerald-50/50";
       case "unhealthy":
         return "border-red-200 bg-red-50/50";
+      case "disabled":
+        return "border-gray-200 bg-gray-50/50";
       default:
         return "border-amber-200 bg-amber-50/50";
     }
@@ -232,7 +237,7 @@ export default function SystemPage() {
           )}
         </div>
 
-        {/* Ollama */}
+        {/* AI Engine */}
         <div
           className={`rounded-xl p-5 border-2 ${statusColor(health?.ollama?.status || "unknown")} transition-colors`}
         >
@@ -242,9 +247,9 @@ export default function SystemPage() {
                 <Brain className="h-5 w-5 text-purple-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Ollama LLM</h3>
-                <p className="text-xs text-gray-500 font-mono">
-                  {health?.ollama?.host || "N/A"}
+                <h3 className="font-semibold text-gray-900">AI Engine</h3>
+                <p className="text-xs text-gray-500">
+                  LLM post-processing
                 </p>
               </div>
             </div>
@@ -272,6 +277,15 @@ export default function SystemPage() {
                   ))}
                 </div>
               )}
+            </div>
+          ) : health?.ollama?.status === "disabled" ? (
+            <div>
+              <span className="text-sm font-medium text-gray-500">
+                Not Enabled
+              </span>
+              <p className="text-xs text-gray-400 mt-2">
+                {health?.ollama?.message || "Optional module — not required for OCR processing."}
+              </p>
             </div>
           ) : (
             <div>
