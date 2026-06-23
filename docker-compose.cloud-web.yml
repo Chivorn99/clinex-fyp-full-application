@@ -94,6 +94,44 @@ services:
       && npm run build
       && npm run start -- --hostname 0.0.0.0 --port 3000"
 
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        PADDLE_VARIANT: cpu
+    container_name: clinex-scheduler
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+    env_file:
+      - ./backend/.env
+    environment:
+      APP_URL: https://clinex.live
+      FRONTEND_URL: https://clinex.live
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${MYSQL_DATABASE:-clinex}
+      DB_USERNAME: ${MYSQL_USER:-clinex}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-clinex_password}
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      REDIS_CLIENT: predis
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+    command: >
+      sh -lc "composer install --no-interaction --prefer-dist --no-progress
+      && php artisan schedule:work"
+
   nginx:
     image: nginx:1.27-alpine
     container_name: clinex-nginx

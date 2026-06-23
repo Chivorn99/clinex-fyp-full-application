@@ -37,6 +37,7 @@ interface SystemHealth {
     pending_jobs: number;
     failed_jobs: number;
     processing_jobs: number;
+    stale_processing_jobs: number;
   };
   disk: {
     uploads_size_bytes: number;
@@ -299,8 +300,16 @@ export default function SystemPage() {
               </div>
             </div>
             {health?.queue &&
-            (health.queue.pending_jobs > 0 ||
-              health.queue.processing_jobs > 0) ? (
+            (health.queue.stale_processing_jobs ?? 0) > 0 ? (
+              <div className="flex items-center gap-1">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <span className="text-xs text-amber-600 font-medium">
+                  Stale
+                </span>
+              </div>
+            ) : health?.queue &&
+              (health.queue.pending_jobs > 0 ||
+                health.queue.processing_jobs > 0) ? (
               <div className="flex items-center gap-1">
                 <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
                 <span className="text-xs text-blue-600 font-medium">
@@ -320,9 +329,24 @@ export default function SystemPage() {
             </div>
             <div className="bg-gray-50 rounded-lg p-3 text-center">
               <p className="text-xs text-gray-500 mb-1">Processing</p>
-              <p className="text-xl font-bold text-blue-600">
+              <p className={`text-xl font-bold ${(health?.queue?.stale_processing_jobs ?? 0) > 0 ? "text-amber-600" : "text-blue-600"}`}>
                 {health?.queue?.processing_jobs ?? 0}
               </p>
+              {(health?.queue?.stale_processing_jobs ?? 0) > 0 && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await apiClient.post("/admin/reset-stale-jobs");
+                      fetchHealth(true);
+                    } catch (err) {
+                      console.error("Failed to reset stale jobs:", err);
+                    }
+                  }}
+                  className="mt-1.5 text-xs text-amber-500 hover:text-amber-700 underline cursor-pointer"
+                >
+                  Reset Stale
+                </button>
+              )}
             </div>
             <div className="bg-gray-50 rounded-lg p-3 text-center">
               <p className="text-xs text-gray-500 mb-1">Failed</p>

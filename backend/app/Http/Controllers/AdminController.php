@@ -375,14 +375,24 @@ class AdminController extends Controller
         }
 
         // Count actively processing batches (more accurate than queue size)
+        $staleThreshold = now()->subMinutes((int) config('clinex.stale_job_threshold_minutes', 120));
+
         $processingBatches = ReportBatch::where('status', 'processing')->count();
         $processingReports = LabReport::where('status', 'processing')->count();
         $processingJobs = $processingBatches + $processingReports;
 
+        // Detect stale jobs (stuck in processing beyond threshold)
+        $staleBatches = ReportBatch::where('status', 'processing')
+            ->where('updated_at', '<', $staleThreshold)->count();
+        $staleReports = LabReport::where('status', 'processing')
+            ->where('updated_at', '<', $staleThreshold)->count();
+        $staleProcessingJobs = $staleBatches + $staleReports;
+
         $health['queue'] = [
-            'pending_jobs'    => $pendingJobs,
-            'failed_jobs'     => $failedJobs,
-            'processing_jobs' => $processingJobs,
+            'pending_jobs'          => $pendingJobs,
+            'failed_jobs'           => $failedJobs,
+            'processing_jobs'       => $processingJobs,
+            'stale_processing_jobs' => $staleProcessingJobs,
         ];
 
         // Disk usage
@@ -439,6 +449,45 @@ class AdminController extends Controller
             'success' => true,
             'message' => "Cleared {$count} failed job(s).",
             'cleared' => $count,
+        ]);
+    }
+
+    /**
+     * Reset jobs stuck in 'processing' status beyond the stale threshold.
+     */
+    public function resetStaleJobs(): JsonResponse
+    {
+        $thresholdMinutes = (int) config('clinex.stale_job_threshold_minutes', 120);
+        $cutoff = now()->subMinutes($thresholdMinutes);
+
+        $resetReports = LabReport::where('status', 'processing')
+            ->where('updated_at', '<', $cutoff)
+            ->update([
+                'status' => 'failed',
+                'processing_error' => 'Stale: manually reset by admin',
+                'processed_at' => now(),
+            ]);
+
+        $resetBatches = ReportBatch::where('status', 'processing')
+            ->where('updated_at', '<', $cutoff)
+            ->update([
+                'status' => 'failed',
+                'processing_completed_at' => now(),
+            ]);
+
+        $total = $resetReports + $resetBatches;
+
+        \Illuminate\Support\Facades\Log::info('Admin reset stale processing jobs', [
+            'reports_reset' => $resetReports,
+            'batches_reset' => $resetBatches,
+            'threshold_minutes' => $thresholdMinutes,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Reset {$total} stale job(s).",
+            'reset_reports' => $resetReports,
+            'reset_batches' => $resetBatches,
         ]);
     }
 }

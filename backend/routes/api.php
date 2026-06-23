@@ -141,6 +141,9 @@ Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(functi
     Route::delete('/flush-failed-jobs', [App\Http\Controllers\AdminController::class, 'flushFailedJobs'])
         ->middleware('permission:view_system_health')
         ->name('flush-failed-jobs');
+    Route::post('/reset-stale-jobs', [App\Http\Controllers\AdminController::class, 'resetStaleJobs'])
+        ->middleware('permission:view_system_health')
+        ->name('reset-stale-jobs');
 
     // Training Data Management
     Route::apiResource('training-data', App\Http\Controllers\VerifiedExamplesController::class)
