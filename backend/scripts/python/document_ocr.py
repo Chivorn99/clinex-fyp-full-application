@@ -264,16 +264,38 @@ def _build_llm_system_prompt(template: Dict[str, Any]) -> str:
         "but the FLAG must only be H, L, or null.\n"
         "12. 'BIOCHIMISTRY' is a misspelling of 'BIOCHEMISTRY' — normalize to 'BIOCHEMISTRY'.\n"
         "13. 'ENNZYMOLOGY' is a misspelling of 'ENZYMOLOGY' — normalize to 'ENZYMOLOGY'.\n"
-        "14. Fix OCR double-character typos in test names: 'Chollesterole' → 'Cholesterol', "
-        "'Tryglyceride' → 'Triglyceride', 'Creatinine, , serum' → 'Creatinine, serum'.\n"
+        "14. The OCR text may contain multiple test categories (e.g., BIOCHEMISTRY, HEMATOLOGY, ENZYMOLOGY). Pay close attention to the headers in the text and categorize each test accordingly. Extract ALL tests from the entire document.\n"
+        "15. Preserve test names exactly as they appear in the original text, including typos and variations (e.g. 'Cholesterole Total', 'Tryglyceride', 'Uric acide'). Do NOT fix spelling in test names.\n"
     )
 
 
 def _build_llm_user_prompt(raw_text: str, template: Dict[str, Any]) -> str:
     """Build the user prompt with raw OCR text and few-shot examples."""
+    doc_type = detect_document_type(raw_text)
     examples = template.get('few_shot_examples', [])
 
-    prompt_parts = ["Extract all structured data from this lab report OCR text.\n"]
+    # Filter examples to match document type so lab examples don't confuse consultation extraction
+    if examples:
+        filtered = []
+        for ex in examples:
+            output = ex.get('output', {})
+            # Consultation examples have 'vital_signs' or 'patient_demographics' keys
+            is_consultation_example = 'vital_signs' in output or 'patient_demographics' in output
+            # Lab examples have 'testResults' or 'labInfo' keys
+            is_lab_example = 'testResults' in output or 'labInfo' in output
+
+            if doc_type == 'consultation' and is_consultation_example:
+                filtered.append(ex)
+            elif doc_type != 'consultation' and is_lab_example:
+                filtered.append(ex)
+        examples = filtered
+
+    if doc_type == 'consultation':
+        doc_label = 'patient consultation form'
+    else:
+        doc_label = 'lab report'
+
+    prompt_parts = [f"Extract all structured data from this {doc_label} OCR text.\n"]
 
     if examples:
         # Prioritize the most recent (verified) examples to adapt to current formats
@@ -283,7 +305,7 @@ def _build_llm_user_prompt(raw_text: str, template: Dict[str, Any]) -> str:
             prompt_parts.append(f"--- Example {i} Input ---\n{ex['input']}\n")
             prompt_parts.append(f"--- Example {i} Output ---\n{json.dumps(ex['output'], ensure_ascii=False)}\n")
 
-    prompt_parts.append("=== ACTUAL LAB REPORT TO EXTRACT ===\n")
+    prompt_parts.append(f"=== ACTUAL {doc_label.upper()} TO EXTRACT ===\n")
     prompt_parts.append(raw_text)
 
     return "\n".join(prompt_parts)
@@ -304,12 +326,29 @@ def detect_document_type(ocr_text: str) -> str:
 
 def _build_consultation_system_prompt(template: Dict[str, Any]) -> str:
     return (
-        "You are a medical data extractor for hospital consultation forms.\n\n"
+        "You are a medical data extractor for Cambodian hospital Patient Consultation forms.\n"
+        "Extract structured JSON from raw OCR text.\n\n"
         "STRICT RULES:\n"
-        "1. Extract patient demographics, normalizing age to years/months/days integers.\n"
-        "2. Strip LaTeX notation from vital signs (e.g. $36,5^{\\circ}C$ -> 36.5, $80/mn$ -> 80).\n"
-        "3. Parse blood pressure into systolic and diastolic numbers.\n"
-        "4. If a value cannot be determined, use null.\n"
+        "1. hospital_name: Look for 'KV Hospital' or similar hospital name in the header. Default to 'KV Hospital' if the text contains 'KV' or 'HOSPITAL'.\n"
+        "2. document_type: Always output 'Patient Consultation Information'.\n"
+        "3. physician: Extract the doctor name (e.g. 'Dr. LEANG Choeu'). It may appear after 'Physician :' or at the bottom as 'Physician's Name'.\n"
+        "4. evaluation_date: Convert from DD/MM/YYYY HH:MM format to YYYY-MM-DD HH:MM:SS. Example: '31/03/2024 13:34' -> '2024-03-31 13:34:00'.\n"
+        "5. patient_demographics.name_khmer: Extract the Khmer patient name after 'Patient :' or 'ឈ្មោះ'. The name may contain garbled Unicode — extract the best text available.\n"
+        "6. patient_demographics.gender: Output 'Male' or 'Female'. Map 'M' to 'Male', 'F' to 'Female'.\n"
+        "7. patient_demographics.payment_type: Extract text after 'Payment Type :' (e.g. 'ប.ស.ស', 'GIS', 'Insurance').\n"
+        "8. patient_demographics.age: Parse into integer years, months, days. "
+        "The OCR may format age as '51 ñ/year, 11 18/month, 14 iŃj/day' — extract the FIRST number for years, months, days respectively. "
+        "Garbled Khmer text between numbers should be ignored.\n"
+        "9. vital_signs: The OCR text shows vital signs with labels like '(Systolic)', '(Diastolic)', '(Pulse)', '(RR)', '(Temperature)', '(O2sat)', '(Height)', '(Weight)'. "
+        "Extract the numeric values. Strip units like /mmHg, /mn, °C, %, cm, kg. "
+        "Example: '107/mmHg' -> systolic_mmhg: 107, '75/mmHg' -> diastolic_mmhg: 75, '80 /mn' -> pulse_bpm: 80, '36,5 °C' -> temperature_celsius: 36.5.\n"
+        "10. If vital signs section is empty or missing, output an object with all null values, NOT an empty array.\n"
+        "11. clinical_notes.chief_complaint: Extract text after '(Chief complain)' or 'Chief Complaint'. May be in French (e.g. 'douleur de la pièd droite').\n"
+        "12. clinical_notes.current_medications: Extract text after '(Current medications)'.\n"
+        "13. treatment_plan: Extract prescription_id (after 'Prescription') and laboratory_id (after 'Laboratory'). These are codes like 'PRE001226', 'PAR004366'.\n"
+        "14. Ignore hospital phone numbers: 097 840 47 89, 012 89 17 45, 012 28 60 70.\n"
+        "15. The OCR text contains garbled Khmer Unicode characters — focus on extracting English values and numbers.\n"
+        "16. If a value cannot be determined, use null — NEVER make up data.\n"
     )
 
 def _get_consultation_json_schema() -> Dict[str, Any]:
@@ -332,9 +371,11 @@ def _get_consultation_json_schema() -> Dict[str, Any]:
                             "years": {"type": ["integer", "null"]},
                             "months": {"type": ["integer", "null"]},
                             "days": {"type": ["integer", "null"]}
-                        }
+                        },
+                        "required": ["years", "months", "days"]
                     }
-                }
+                },
+                "required": ["name_khmer", "gender", "payment_type", "age"]
             },
             "vital_signs": {
                 "type": "object",
@@ -347,24 +388,29 @@ def _get_consultation_json_schema() -> Dict[str, Any]:
                     "oxygen_saturation_percentage": {"type": ["number", "null"]},
                     "height_cm": {"type": ["number", "null"]},
                     "weight_kg": {"type": ["number", "null"]}
-                }
+                },
+                "required": ["systolic_mmhg", "diastolic_mmhg", "pulse_bpm", "respiratory_rate_per_mn",
+                             "temperature_celsius", "oxygen_saturation_percentage", "height_cm", "weight_kg"]
             },
             "clinical_notes": {
                 "type": "object",
                 "properties": {
                     "chief_complaint": {"type": ["string", "null"]},
                     "current_medications": {"type": ["string", "null"]}
-                }
+                },
+                "required": ["chief_complaint", "current_medications"]
             },
             "treatment_plan": {
                 "type": "object",
                 "properties": {
                     "prescription_id": {"type": ["string", "null"]},
                     "laboratory_id": {"type": ["string", "null"]}
-                }
+                },
+                "required": ["prescription_id", "laboratory_id"]
             }
         },
-        "required": ["hospital_name", "document_type", "patient_demographics", "vital_signs"]
+        "required": ["hospital_name", "document_type", "physician", "evaluation_date",
+                     "patient_demographics", "vital_signs", "clinical_notes", "treatment_plan"]
     }
 
 def _get_ollama_json_schema(template: Dict[str, Any]) -> Dict[str, Any]:
@@ -383,7 +429,7 @@ def _get_ollama_json_schema(template: Dict[str, Any]) -> Dict[str, Any]:
             "flag": {"type": ["string", "null"], "enum": ["H", "L", None]},
             "category": {"type": "string"}
         },
-        "required": ["testName", "result", "category"]
+        "required": ["testName", "result", "unit", "referenceRange", "flag", "category"]
     }
     
     if categories:
@@ -464,7 +510,8 @@ def extract_with_llm(raw_text: str, template: Dict[str, Any]) -> Optional[Dict[s
         "stream": False,
         "options": {
             "temperature": 0,
-            "num_ctx": 8192,
+            "num_ctx": 32768,
+            "num_predict": 4096,
         }
     }
 
@@ -2167,6 +2214,156 @@ def extract_text_from_pdf_local(pdf_path: str) -> str:
     except Exception as e:
         raise Exception(f'All PDF extraction methods failed. Last error: {str(e)}')
 
+
+def _normalize_consultation_to_frontend(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Map consultation extraction schema into the patientInfo/testResults format
+    that the frontend verification page expects.
+
+    The frontend reads:
+      - patientInfo: { name, patientId, age, gender, phone }
+      - labInfo: { labId, requestedBy, requestedDate, ... }
+      - testResults: [ { category, testName, result, unit, referenceRange, flag } ]
+
+    Consultation forms extract:
+      - patient_demographics: { name_khmer, gender, payment_type, age }
+      - vital_signs: { systolic_mmhg, diastolic_mmhg, pulse_bpm, ... }
+      - clinical_notes: { chief_complaint, current_medications }
+      - treatment_plan: { prescription_id, laboratory_id }
+    """
+    demo = result.get('patient_demographics', {}) or {}
+    vital = result.get('vital_signs', {}) or {}
+    clinical = result.get('clinical_notes', {}) or {}
+    treatment = result.get('treatment_plan', {}) or {}
+
+    # ── Map patient_demographics → patientInfo ──
+    age_obj = demo.get('age', {})
+    if isinstance(age_obj, dict):
+        age_parts = []
+        if age_obj.get('years'):
+            age_parts.append(f"{age_obj['years']} Y")
+        if age_obj.get('months'):
+            age_parts.append(f"{age_obj['months']} M")
+        if age_obj.get('days'):
+            age_parts.append(f"{age_obj['days']} D")
+        age_str = ', '.join(age_parts) if age_parts else ''
+    else:
+        age_str = str(age_obj) if age_obj else ''
+
+    gender_raw = demo.get('gender', '') or ''
+    # Normalize 'Male'/'Female' to match frontend display
+    gender_str = gender_raw
+
+    result['patientInfo'] = {
+        'name': demo.get('name_khmer', '') or result.get('physician', '') or '',
+        'patientId': '',
+        'age': age_str,
+        'gender': gender_str,
+        'phone': '',
+    }
+
+    # ── Map physician + evaluation_date → labInfo ──
+    result['labInfo'] = {
+        'labId': treatment.get('laboratory_id', '') or '',
+        'requestedBy': result.get('physician', '') or '',
+        'requestedDate': result.get('evaluation_date', '') or '',
+        'collectedDate': '',
+        'analysisDate': '',
+        'validatedBy': result.get('physician', '') or '',
+    }
+
+    # ── Map vital_signs + clinical_notes + treatment_plan → testResults ──
+    test_results = []
+
+    # Vital signs as individual "test results"
+    vital_sign_labels = {
+        'systolic_mmhg': ('Systolic BP', 'mmHg', '90 - 140'),
+        'diastolic_mmhg': ('Diastolic BP', 'mmHg', '60 - 90'),
+        'pulse_bpm': ('Pulse', '/mn', '60 - 100'),
+        'respiratory_rate_per_mn': ('Respiratory Rate', '/mn', '12 - 20'),
+        'temperature_celsius': ('Temperature', '°C', '36.1 - 37.2'),
+        'oxygen_saturation_percentage': ('O2 Saturation', '%', '95 - 100'),
+        'height_cm': ('Height', 'cm', ''),
+        'weight_kg': ('Weight', 'kg', ''),
+    }
+
+    for key, (label, unit, ref_range) in vital_sign_labels.items():
+        value = vital.get(key)
+        if value is not None:
+            test_results.append({
+                'category': 'VITAL SIGNS',
+                'testName': label,
+                'result': str(value),
+                'unit': unit,
+                'referenceRange': ref_range,
+                'flag': None,
+            })
+
+    # Clinical notes as test results
+    if clinical.get('chief_complaint'):
+        test_results.append({
+            'category': 'CLINICAL NOTES',
+            'testName': 'Chief Complaint',
+            'result': clinical['chief_complaint'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+    if clinical.get('current_medications'):
+        test_results.append({
+            'category': 'CLINICAL NOTES',
+            'testName': 'Current Medications',
+            'result': clinical['current_medications'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+
+    # Treatment plan items as test results
+    if treatment.get('prescription_id'):
+        test_results.append({
+            'category': 'TREATMENT PLAN',
+            'testName': 'Prescription',
+            'result': treatment['prescription_id'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+    if treatment.get('laboratory_id'):
+        test_results.append({
+            'category': 'TREATMENT PLAN',
+            'testName': 'Laboratory',
+            'result': treatment['laboratory_id'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+
+    # Payment type and evaluation summary as info
+    if demo.get('payment_type'):
+        test_results.append({
+            'category': 'PATIENT INFO',
+            'testName': 'Payment Type',
+            'result': demo['payment_type'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+
+    if result.get('evaluation_summary'):
+        test_results.append({
+            'category': 'CLINICAL NOTES',
+            'testName': 'Evaluation Summary',
+            'result': result['evaluation_summary'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+
+    result['testResults'] = test_results
+
+    return result
+
+
 def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = None, document_type: Optional[str] = None) -> Dict[str, Any]:
     paddle_config = {}
     kiri_config = {}
@@ -2331,6 +2528,14 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
         result['extraction_method'] = extraction_method
         result['rawText'] = ocr_text
         result['confidence'] = confidence
+
+        # ── Normalize consultation data into the frontend-expected format ──
+        # The frontend verification page reads patientInfo, labInfo, testResults
+        # but consultation forms store data as patient_demographics, vital_signs, etc.
+        doc_type_final = document_type or detect_document_type(ocr_text)
+        if doc_type_final == 'consultation':
+            result = _normalize_consultation_to_frontend(result)
+
         return result
     except Exception as e:
         return {

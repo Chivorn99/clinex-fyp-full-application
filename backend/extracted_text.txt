@@ -1,56 +1,286 @@
-spiimato
-6②
-seinaj les
+naj 625
+62
+og
 KV Hospital
-C₂
+032
 K+
-aj ŝi muzipo kimono juu
-niewiu:gai:máquumin ŝawñgwang g::m:1) imw@sminüü j
-IHņiūnínúiðu üís ķu x mw is ñ ñ lys ŠkunstwhUNNI
+ñŝaj ŝanɲmruññist på:nugino šaim:ġkoncıná uġjunpannu
+hniewiu:ga 1:máquumīn ŝawňspans g:pin:im:1]s imwmsminümü äsj
+IHņiūnánúiðu ünijs fu µmw ñjs ji is ŝhusiwn U.N.N¶
 HOSPITAL
 in:/Name
-: cu inm
-nuis/Age
-:45 Y
+: Mice Soksan
+inuis/Age
+: 35 Y, 5 M, 3 D
 Ing/Gender
 : Male
-own
 Patient ID
-: PT001884
+: PT002051
 Lab ID
-: LT001244
-ging/Phone
-: 0716666598
+: LT001348
 Requested Date
-: 19/03/2024 08:56
+: 31/03/2024 09:25
 Collected Date
-: 19/03/2024 09:45
+: 31/03/2024 11:35
 Analysis Date
-: 19/03/2024 09:45
+: 31/03/2024 11:35
 Requested By
-: Dr. Ou Kimling
+: Dr. LEANG Choeu
 LABORATORY REPORT
 BIOCHIMISTRY
 Results
 Unit
 Reference Range
 Flag
+Creatinine, serum
+:
+0.9
+mg/dL
+(0.9
+1.1)
+Urea/BUN
+:
+25
+mg/dL
+(6.0 40.0 )
 Glucose
 :
-105
+82
 mg/dL
-( 75-115)
-Hb-Alc
+(75-115)
+Cholesterole Total
 :
-6.5
-응
-(4.0 - 6.0)
-H
+175
+mg/dL
+(0
+-
+- 200)
+Cholesterol-HDL
+: 66
+mg/dL
+(>60)
+Cholesterol-LDL
+: 56
+-
+mg/dL
+(0
+$150)
+Tryglyceride
+:
+58
+mg/dL
+(0
+-
+. 150)
+Uric acide
+:
+4.6
+mg/dL
+(3.5 - 6.0)
+ENZYMOLOGY
+Results
+Unit
+Reference Range
+Flag
+TRANSAMINASE
+SGPT/ALT
+:
+20
+U/L
+(0
+41)
+SGOT/AST
+22
+U/L
+(0
+(40)
 Validated By:
 Lab Technician:
-b
-is
-2024-03-19 09:47
-2024-03-19 09:47
-mawhs: qûqniumi wžinéšu [ñġjaw iaġnjaw (vynwñanskunjnm b ñ.8)
+e
+NATÜÜMess
+2024-03-31 12:47
+2024-03-31 12:47
+mwwis: qûqniumi wjšinššu vinnjaw tagħjaw (vynwñanskinjom 5 #1.8)
+: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
+naj 625
+62
+SIGBJ
+KV Hospital
+og
+032
+K+
+ñŝaj ŝanɲmruññist på:nugino šaim:ġkoncıná uġjunpannu
+hniewiu:ga 1:máquumīn ŝawňspans g:pin:im:1]s imwmsminümü äsj
+IHņiūnánúiðu ünijs fu µmw ñjs ji is ŝhusiwn U.N.N¶
+HOSPITAL
+in:/Name
+: Mice Soksan
+inuis/Age
+: 35 Y, 5 M, 3 D
+Ing/Gender
+: Male
+Patient ID
+: PT002051
+Lab ID
+: LT001348
+Requested Date
+: 31/03/2024 09:25
+Collected Date
+: 31/03/2024 11:35
+Analysis Date
+: 31/03/2024 11:35
+Requested By
+: Dr. LEANG Choeu
+LABORATORY REPORT
+HEMATOLOGY
+Results
+Unit
+Reference Range
+Flag
+CBC
+WBC
+:
+7.9
+10⁹/L
+(3.5-10.0)
+LYM%
+:
+25.0
+응
+(15.0-50.0)
+MONO%
+: 7.0
+응
+(2.0-15.0)
+NUE%
+:
+68.0
+응
+(35.0-80.0)
+EOSINO%
+:
+12.4
+응
+(11.5-16.5)
+BASO%
+:
+31.5
+응
+(25.0-35.0)
+HGB
+:
+36.7
+g/dL
+(31.0-38.0)
+MCH
+: 3.95
+pg
+(3.50-5.50)
+MCHC
+:
+85.9
+g/dL
+(75.0-100.0)
+RBC
+:
+34.0
+X1012/L
+(35.0-55.0)
+L
+MCV
+:
+165
+fl
+(150-400)
+Validated By:
+Lab Technician:
+e
+NATÜÜMess
+2024-03-31 12:47
+2024-03-31 12:47
+mwwis: qûqniumi wjšinššu vinnjaw tagħjaw (vynwñanskinjom 5 #1.8)
+: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
+naj 625
+62
+og
+KV Hospital
+032
+K+
+ñŝaj ŝanɲmruññist på:nugino šaim:ġkoncıná uġjunpannu
+hniewiu:ga 1:máquumīn ŝawňspans g:pin:im:1]s imwmsminümü äsj
+IHņiūnánúiðu ünijs fu µmw ñjs ji is ŝhusiwn U.N.N¶
+HOSPITAL
+in:/Name
+: Mice Soksan
+inuis/Age
+: 35 Y, 5 M, 3 D
+Ing/Gender
+: Male
+Patient ID
+: PT002051
+Lab ID
+: LT001348
+Requested Date
+: 31/03/2024 09:25
+Collected Date
+: 31/03/2024 11:35
+Analysis Date
+: 31/03/2024 11:35
+Requested By
+: Dr. LEANG Choeu
+LABORATORY REPORT
+URINE ANALYSIS
+Results
+Unit
+Reference Range
+Flag
+URINE ANALYSIS 11 TEST
+LEU
+:
+NEGATIVE
+Leu/μL
+NIT
+:
+NEGATIVE
+URO
+:
+0.2
+mg/dL
+PRO
+:
+NEGATIVE
+mg/dL
+PH
+:
+6.0
+BLO
+:
+POSITIVE (+)
+Ery/μl
+SG
+:
+1.020
+KET
+:
+NEGATIVE
+mg/dL
+BIL
+:
+NEGATIVE
+mg/dL
+GLU
+:
+NEGATIVE
+mg/dL
+ASC
+:
+NEGATIVE
+mg/dL
+Validated By:
+Lab Technician:
+e
+NATÜÜMess
+2024-03-31 12:47
+2024-03-31 12:47
+mwwis: qûqniumi wjšinššu vinnjaw tagħjaw (vynwñanskinjom 5 #1.8)
 : 097 840 47 89/ 012 89 17 45/ 012 28 60 70
