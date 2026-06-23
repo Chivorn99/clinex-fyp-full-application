@@ -335,37 +335,50 @@ class AdminController extends Controller
             ];
         }
 
-        // Ollama check
-        $ollamaEnabled = filter_var(env('OLLAMA_ENABLED', false), FILTER_VALIDATE_BOOLEAN);
-        $ollamaHost = env('OLLAMA_HOST', 'http://ollama:11434');
+        // AI Engines — detect all configured OCR/AI providers
+        $engines = [];
 
-        if (!$ollamaEnabled) {
-            $health['ollama'] = [
-                'status' => 'disabled',
-                'host' => $ollamaHost,
-                'message' => 'LLM post-processing is not enabled for this deployment.',
-            ];
-        } else {
-            try {
-                $response = Http::timeout(5)->get("{$ollamaHost}/api/tags");
-                $models = $response->successful() ? $response->json('models', []) : [];
-                $health['ollama'] = [
-                    'status' => $response->successful() ? 'healthy' : 'unhealthy',
-                    'host' => $ollamaHost,
-                    'models' => array_map(fn($m) => [
-                        'name' => $m['name'] ?? 'unknown',
-                        'size' => $m['size'] ?? 0,
-                    ], $models),
-                    'model_count' => count($models),
-                ];
-            } catch (\Exception $e) {
-                $health['ollama'] = [
-                    'status' => 'unhealthy',
-                    'host' => $ollamaHost,
-                    'error' => 'Could not connect to Ollama: ' . $e->getMessage(),
-                ];
-            }
-        }
+        // Google Document AI
+        $googleProjectId = env('GOOGLE_CLOUD_PROJECT_ID', '');
+        $googleProcessorId = env('GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID', '');
+        $googleCredentials = env('GOOGLE_APPLICATION_CREDENTIALS', '');
+        $engines[] = [
+            'name' => 'Google Document AI',
+            'enabled' => !empty($googleProjectId) && !empty($googleProcessorId) && !empty($googleCredentials),
+            'type' => 'ocr',
+        ];
+
+        // PaddleOCR
+        $engines[] = [
+            'name' => 'PaddleOCR',
+            'enabled' => filter_var(env('PADDLE_OCR_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'type' => 'ocr',
+        ];
+
+        // KiriOCR
+        $engines[] = [
+            'name' => 'KiriOCR',
+            'enabled' => filter_var(env('KIRI_OCR_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'type' => 'ocr',
+        ];
+
+        // Ollama LLM (post-processing)
+        $ollamaEnabled = filter_var(env('OLLAMA_ENABLED', false), FILTER_VALIDATE_BOOLEAN);
+        $engines[] = [
+            'name' => 'Ollama LLM',
+            'enabled' => $ollamaEnabled,
+            'type' => 'llm',
+            'model' => env('OLLAMA_MODEL', 'phi3:mini'),
+        ];
+
+        $enabledCount = count(array_filter($engines, fn($e) => $e['enabled']));
+
+        $health['ai_engines'] = [
+            'status' => $enabledCount > 0 ? 'healthy' : 'unhealthy',
+            'engines' => $engines,
+            'enabled_count' => $enabledCount,
+            'total_count' => count($engines),
+        ];
 
         // Queue check — accurate real-time stats
         $pendingJobs = 0;

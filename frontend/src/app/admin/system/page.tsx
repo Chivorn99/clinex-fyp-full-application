@@ -15,9 +15,11 @@ import {
   Cpu,
 } from "lucide-react";
 
-interface OllamaModel {
+interface AiEngine {
   name: string;
-  size: number;
+  enabled: boolean;
+  type: string;
+  model?: string;
 }
 
 interface SystemHealth {
@@ -26,13 +28,11 @@ interface SystemHealth {
     type?: string;
     error?: string;
   };
-  ollama: {
+  ai_engines: {
     status: string;
-    host?: string;
-    models?: OllamaModel[];
-    model_count?: number;
-    error?: string;
-    message?: string;
+    engines: AiEngine[];
+    enabled_count: number;
+    total_count: number;
   };
   queue: {
     pending_jobs: number;
@@ -237,9 +237,9 @@ export default function SystemPage() {
           )}
         </div>
 
-        {/* AI Engine */}
+        {/* AI Engines */}
         <div
-          className={`rounded-xl p-5 border-2 ${statusColor(health?.ollama?.status || "unknown")} transition-colors`}
+          className={`rounded-xl p-5 border-2 ${statusColor(health?.ai_engines?.status || "unknown")} transition-colors`}
         >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -247,58 +247,56 @@ export default function SystemPage() {
                 <Brain className="h-5 w-5 text-purple-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">AI Engine</h3>
+                <h3 className="font-semibold text-gray-900">AI Engines</h3>
                 <p className="text-xs text-gray-500">
-                  LLM post-processing
+                  OCR &amp; LLM providers
                 </p>
               </div>
             </div>
-            {statusIcon(health?.ollama?.status || "unknown")}
+            {statusIcon(health?.ai_engines?.status || "unknown")}
           </div>
-          {health?.ollama?.status === "healthy" ? (
-            <div className="space-y-2">
-              <span className="text-sm font-medium text-emerald-700">
-                {health.ollama.model_count} model(s) loaded
-              </span>
-              {health.ollama.models && health.ollama.models.length > 0 && (
-                <div className="space-y-1">
-                  {health.ollama.models.map((m, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-1.5"
-                    >
-                      <span className="text-xs font-medium text-gray-800 font-mono">
-                        {m.name}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {formatBytes(m.size)}
+          <div>
+            <span className="text-sm font-medium text-emerald-700">
+              {health?.ai_engines?.enabled_count ?? 0} of{" "}
+              {health?.ai_engines?.total_count ?? 0} engine(s) active
+            </span>
+            {health?.ai_engines?.engines && (
+              <div className="space-y-1.5 mt-2">
+                {health.ai_engines.engines.map((engine, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-1.5"
+                  >
+                    <div className="flex items-center gap-2">
+                      {engine.enabled ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      ) : (
+                        <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-300 inline-block" />
+                      )}
+                      <span
+                        className={`text-xs font-medium ${
+                          engine.enabled
+                            ? "text-gray-800"
+                            : "text-gray-400"
+                        }`}
+                      >
+                        {engine.name}
                       </span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : health?.ollama?.status === "disabled" ? (
-            <div>
-              <span className="text-sm font-medium text-gray-500">
-                Not Enabled
-              </span>
-              <p className="text-xs text-gray-400 mt-2">
-                {health?.ollama?.message || "Optional module — not required for OCR processing."}
-              </p>
-            </div>
-          ) : (
-            <div>
-              <span className="text-sm font-medium text-red-700">
-                Not Available
-              </span>
-              {health?.ollama?.error && (
-                <p className="text-xs text-red-600 mt-2 bg-red-50 rounded p-2">
-                  {health.ollama.error}
-                </p>
-              )}
-            </div>
-          )}
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full ${
+                        engine.enabled
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-gray-100 text-gray-400"
+                      }`}
+                    >
+                      {engine.enabled ? "Enabled" : "Off"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Queue Worker */}
