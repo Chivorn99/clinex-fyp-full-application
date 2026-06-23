@@ -277,7 +277,7 @@ def _build_llm_user_prompt(raw_text: str, template: Dict[str, Any]) -> str:
 
     if examples:
         # Prioritize the most recent (verified) examples to adapt to current formats
-        selected_examples = examples[-2:] if len(examples) > 2 else examples
+        selected_examples = examples[-4:] if len(examples) > 4 else examples
         prompt_parts.append("=== FEW-SHOT EXAMPLES ===\n")
         for i, ex in enumerate(selected_examples, 1):
             prompt_parts.append(f"--- Example {i} Input ---\n{ex['input']}\n")
@@ -464,55 +464,74 @@ def extract_with_llm(raw_text: str, template: Dict[str, Any]) -> Optional[Dict[s
         "stream": False,
         "options": {
             "temperature": 0,
-            "num_ctx": 4096,
+            "num_ctx": 8192,
         }
     }
 
-    try:
-        print(f'DEBUG: Calling Ollama ({model}) at {api_url}...', file=sys.stderr)
-        start = time.time()
-        resp = http_requests.post(
-            api_url,
-            json=payload,
-            timeout=ollama_config['timeout']
-        )
-        elapsed = time.time() - start
-        print(f'DEBUG: Ollama responded in {elapsed:.1f}s (status {resp.status_code})', file=sys.stderr)
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            print(f'DEBUG: Calling Ollama ({model}) at {api_url} (attempt {attempt}/{max_retries})...', file=sys.stderr)
+            start = time.time()
+            resp = http_requests.post(
+                api_url,
+                json=payload,
+                timeout=ollama_config['timeout']
+            )
+            elapsed = time.time() - start
+            print(f'DEBUG: Ollama responded in {elapsed:.1f}s (status {resp.status_code})', file=sys.stderr)
 
-        if resp.status_code != 200:
-            print(f'DEBUG: Ollama error: {resp.text[:500]}', file=sys.stderr)
+            if resp.status_code != 200:
+                print(f'DEBUG: Ollama error (attempt {attempt}): {resp.text[:500]}', file=sys.stderr)
+                if attempt < max_retries:
+                    sleep(2 ** attempt)
+                    continue
+                return None
+
+            response_data = resp.json()
+            content = response_data.get('message', {}).get('content', '')
+
+            if not content:
+                print(f'DEBUG: Ollama returned empty content (attempt {attempt})', file=sys.stderr)
+                if attempt < max_retries:
+                    sleep(2 ** attempt)
+                    continue
+                return None
+
+            # Parse the JSON content from the LLM response
+            result = json.loads(content) if isinstance(content, str) else content
+            print(f'DEBUG: Ollama extracted {len(result.get("testResults", []))} test results', file=sys.stderr)
+
+            # ── Anchor-based post-processing ──
+            anchor_key = _detect_hospital_anchor(raw_text)
+            if anchor_key:
+                result = _apply_hospital_anchor_overrides(result, anchor_key)
+
+            return result
+
+        except http_requests.exceptions.ConnectionError:
+            print(f'DEBUG: Ollama unreachable (attempt {attempt}/{max_retries})', file=sys.stderr)
+            if attempt < max_retries:
+                sleep(2 ** attempt)
+                continue
+            print('DEBUG: Ollama unreachable after all retries — falling back to regex', file=sys.stderr)
             return None
-
-        response_data = resp.json()
-        content = response_data.get('message', {}).get('content', '')
-
-        if not content:
-            print('DEBUG: Ollama returned empty content', file=sys.stderr)
+        except http_requests.exceptions.Timeout:
+            print(f'DEBUG: Ollama timed out (attempt {attempt}/{max_retries})', file=sys.stderr)
+            if attempt < max_retries:
+                sleep(2 ** attempt)
+                continue
+            print(f'DEBUG: Ollama timed out after all retries — falling back to regex', file=sys.stderr)
             return None
-
-        # Parse the JSON content from the LLM response
-        result = json.loads(content) if isinstance(content, str) else content
-        print(f'DEBUG: Ollama extracted {len(result.get("testResults", []))} test results', file=sys.stderr)
-
-        # ── Anchor-based post-processing ──
-        anchor_key = _detect_hospital_anchor(raw_text)
-        if anchor_key:
-            result = _apply_hospital_anchor_overrides(result, anchor_key)
-
-        return result
-
-    except http_requests.exceptions.ConnectionError:
-        print('DEBUG: Ollama unreachable (connection refused) — falling back to regex', file=sys.stderr)
-        return None
-    except http_requests.exceptions.Timeout:
-        print(f'DEBUG: Ollama timed out after {ollama_config["timeout"]}s', file=sys.stderr)
-        return None
-    except (json.JSONDecodeError, KeyError, TypeError) as e:
-        print(f'DEBUG: Failed to parse Ollama response: {e}', file=sys.stderr)
-        return None
-    except Exception as e:
-        print(f'DEBUG: Ollama call failed unexpectedly: {e}', file=sys.stderr)
-        return None
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            print(f'DEBUG: Failed to parse Ollama response (attempt {attempt}): {e}', file=sys.stderr)
+            if attempt < max_retries:
+                sleep(2 ** attempt)
+                continue
+            return None
+        except Exception as e:
+            print(f'DEBUG: Ollama call failed unexpectedly: {e}', file=sys.stderr)
+            return None
 
 
 def validate_consultation_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -1888,144 +1907,108 @@ class OptimizedLabReportParser:
                         if tn == 'Creatinine, serum':
                             unit = 'mg/dL'
                             reference_range = '(0.9 - 1.1)'
-                            result = result or '0.9'
                         elif tn == 'Urea/BUN':
                             unit = 'mg/dL'
                             reference_range = '(6.0 - 40.0)'
-                            result = result or '27'
                         elif tn == 'Cholesterole Total':
                             unit = 'mg/dL'
                             reference_range = '$(0-200)$'
-                            result = result or '197'
                         elif tn == 'Cholesterol-HDL':
                             unit = 'mg/dL'
                             reference_range = '(>60)'
-                            flag = 'L' if result == '50' else flag
-                            result = result or '50'
                         elif tn == 'Cholesterol-LDL':
                             unit = 'mg/dL'
                             reference_range = '$(0-150)$'
-                            result = result or '103'
                         elif tn == 'Tryglyceride':
                             unit = 'mg/dL'
                             reference_range = '$(0-150)$'
-                            result = result or '75'
                         elif tn == 'Uric acide':
                             unit = 'mg/dL'
                             reference_range = '$(3.5-6.0)$'
-                            result = result or '5.1'
                         elif tn == 'GGT (Gamm Glutamyl Transferas)':
                             unit = 'U/L'
                             reference_range = '$(0-55)$'
-                            result = result or '52'
                         elif tn == 'SGPT/ALT':
                             unit = '$U/L$'
                             reference_range = '$(0-41)$'
-                            result = result or '9'
                         elif tn == 'SGOT/AST':
                             unit = '$U/L$'
                             reference_range = '$(0-40)$'
-                            result = result or '26'
                         elif tn == 'Morphine':
                             unit = None
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'Amphetamine':
                             unit = None
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'Metamphetamine':
                             unit = None
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'WBC':
                             unit = '$10^{9}/L$'
                             reference_range = '(3.5-10.0)'
-                            result = result or '6.8'
                         elif tn == 'LYM%':
                             unit = '%'
                             reference_range = '(15.0-50.0)'
-                            result = result or '29.2'
                         elif tn == 'MONO%':
                             unit = '%'
                             reference_range = '(2.0-15.0)'
-                            result = result or '7.3'
                         elif tn == 'NUE%':
                             unit = '%'
                             reference_range = '(35.0-80.0)'
-                            result = result or '63.5'
                         elif tn == 'EOSINO%':
                             unit = '%'
                             reference_range = '(11.5-16.5)'
-                            result = result or '13.6'
                         elif tn == 'BASO%':
                             unit = '%'
                             reference_range = '(25.0-35.0)'
-                            result = result or '29.1'
                         elif tn == 'HGB':
                             unit = 'g/dL'
                             reference_range = '(31.0-38.0)'
-                            result = result or '36.7'
                         elif tn == 'MCH':
                             unit = 'pg'
                             reference_range = '(3.50-5.50)'
-                            result = result or '4.68'
                         elif tn == 'MCHC':
                             unit = 'g/dL'
                             reference_range = '(75.0-100.0)'
-                            result = result or '79.2'
                         elif tn == 'RBC':
                             unit = 'x1012/L'
                             reference_range = '(35.0-55.0)'
-                            result = result or '37.1'
                         elif tn == 'MCV':
                             unit = 'fl'
                             reference_range = '(150-400)'
-                            result = result or '195'
                         elif tn == 'LEU':
                             unit = 'Leu/µL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'NIT':
                             unit = None
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'URO':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or '0.2'
                         elif tn == 'PRO':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'PH':
                             unit = None
                             reference_range = None
-                            result = result or '6.5'
                         elif tn == 'BLO':
                             unit = 'Ery/pl'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'SG':
                             unit = None
                             reference_range = None
-                            result = result or '1.015'
                         elif tn == 'KET':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'BIL':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'GLU':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'ASC':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'Group':
                             unit = None
                             reference_range = None
