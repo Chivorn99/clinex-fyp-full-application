@@ -19,7 +19,7 @@ interface AiEngine {
   name: string;
   enabled: boolean;
   type: string;
-  model?: string;
+  detail?: string;
 }
 
 interface SystemHealth {
@@ -265,23 +265,30 @@ export default function SystemPage() {
                 {health.ai_engines.engines.map((engine, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-1.5"
+                    className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2"
                   >
                     <div className="flex items-center gap-2">
                       {engine.enabled ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
                       ) : (
-                        <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-300 inline-block" />
+                        <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-300 inline-block flex-shrink-0" />
                       )}
-                      <span
-                        className={`text-xs font-medium ${
-                          engine.enabled
-                            ? "text-gray-800"
-                            : "text-gray-400"
-                        }`}
-                      >
-                        {engine.name}
-                      </span>
+                      <div>
+                        <span
+                          className={`text-xs font-medium ${
+                            engine.enabled
+                              ? "text-gray-800"
+                              : "text-gray-400"
+                          }`}
+                        >
+                          {engine.name}
+                        </span>
+                        {engine.detail && (
+                          <p className={`text-[10px] leading-tight ${engine.enabled ? "text-gray-400" : "text-gray-300"}`}>
+                            {engine.detail}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <span
                       className={`text-xs px-2 py-0.5 rounded-full ${

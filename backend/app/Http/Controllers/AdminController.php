@@ -338,7 +338,23 @@ class AdminController extends Controller
         // AI Engines — detect all configured OCR/AI providers
         $engines = [];
 
-        // Google Document AI
+        // PaddleOCR — primary OCR for English & numeric lab data
+        $engines[] = [
+            'name' => 'PaddleOCR',
+            'enabled' => filter_var(env('PADDLE_OCR_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'type' => 'ocr',
+            'detail' => 'English & numeric extraction',
+        ];
+
+        // KiriOCR — Khmer-specialized OCR for patient demographics
+        $engines[] = [
+            'name' => 'Kiri OCR',
+            'enabled' => filter_var(env('KIRI_OCR_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'type' => 'ocr',
+            'detail' => 'Khmer text recognition',
+        ];
+
+        // Google Document AI — confidence fallback when dual-engine score < 0.85
         $googleProjectId = env('GOOGLE_CLOUD_PROJECT_ID', '');
         $googleProcessorId = env('GOOGLE_CLOUD_DOCUMENT_AI_PROCESSOR_ID', '');
         $googleCredentials = env('GOOGLE_APPLICATION_CREDENTIALS', '');
@@ -346,29 +362,17 @@ class AdminController extends Controller
             'name' => 'Google Document AI',
             'enabled' => !empty($googleProjectId) && !empty($googleProcessorId) && !empty($googleCredentials),
             'type' => 'ocr',
+            'detail' => 'Low-confidence fallback',
         ];
 
-        // PaddleOCR
-        $engines[] = [
-            'name' => 'PaddleOCR',
-            'enabled' => filter_var(env('PADDLE_OCR_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
-            'type' => 'ocr',
-        ];
-
-        // KiriOCR
-        $engines[] = [
-            'name' => 'KiriOCR',
-            'enabled' => filter_var(env('KIRI_OCR_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
-            'type' => 'ocr',
-        ];
-
-        // Ollama LLM (post-processing)
+        // Ollama LLM — structures raw OCR text into validated JSON
         $ollamaEnabled = filter_var(env('OLLAMA_ENABLED', false), FILTER_VALIDATE_BOOLEAN);
+        $ollamaModel = env('OLLAMA_MODEL', 'phi3:mini');
         $engines[] = [
             'name' => 'Ollama LLM',
             'enabled' => $ollamaEnabled,
             'type' => 'llm',
-            'model' => env('OLLAMA_MODEL', 'phi3:mini'),
+            'detail' => $ollamaEnabled ? $ollamaModel : 'Structured extraction',
         ];
 
         $enabledCount = count(array_filter($engines, fn($e) => $e['enabled']));
