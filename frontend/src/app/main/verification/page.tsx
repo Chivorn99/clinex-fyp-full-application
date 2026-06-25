@@ -895,10 +895,9 @@ export default function VerificationPage() {
         },
         notes: `Verified by ${currentUser.name} on ${new Date().toLocaleDateString()}`,
       };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await apiClient.post(
         `/lab-reports/${selectedReport.id}/verify`,
-        verifiedData as any,
+        verifiedData as unknown as Record<string, unknown>,
       );
       if (response.success) {
         const updatedReport = {
