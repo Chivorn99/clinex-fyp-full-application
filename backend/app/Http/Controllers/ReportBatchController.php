@@ -818,7 +818,9 @@ class ReportBatchController extends Controller
                 'original_filename' => $report->original_filename,
                 'processed_at' => $report->processed_at,
                 'processing_time' => $report->processing_time,
+                'document_type' => $report->document_type,
                 'extracted_data_summary' => [
+                    'document_type' => $report->extracted_data['documentType'] ?? 'lab_report',
                     'has_patient_info' => !empty($report->extracted_data['patientInfo'] ?? null),
                     'has_lab_info' => !empty($report->extracted_data['labInfo'] ?? null),
                     'test_count' => count($report->extracted_data['testResults'] ?? []),

@@ -35,6 +35,7 @@ class LabReport extends Model
         'processing_error',
         'extracted_data',
         'raw_ocr_text',
+        'document_type',
     ];
 
     protected $casts = [

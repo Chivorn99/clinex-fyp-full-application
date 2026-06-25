@@ -47,8 +47,8 @@ class ProcessSingleLabReport implements ShouldQueue
                 throw new \Exception("File not found: {$filePath}");
             }
 
-            // Use the optimized Python script
-            $pythonScript = base_path('scripts/python/document_ocr.py');
+            // Use the v2 OCR script with layout classification
+            $pythonScript = base_path('scripts/python/clinex_ocr_v2.py');
 
             // Resolve Python binary: prefer python3 (Docker), fall back to python
             $pythonPath = config('app.python_path', 'python3');
@@ -147,13 +147,17 @@ class ProcessSingleLabReport implements ShouldQueue
                 $result = $this->normalizeExtractedData($result);
             }
 
+            // Detect document type from normalized result
+            $docType = $result['documentType'] ?? 'lab_report';
+
             $updateData = [
                 'processed_at' => now(),
                 'processing_time' => $result['processingTime'] ?? null,
                 'status' => $isSuccess ? 'processed' : 'failed',
                 'extracted_data' => $isSuccess ? $result : null,
-                'raw_ocr_text' => $isSuccess ? ($result['rawText'] ?? null) : ($result['rawText'] ?? null),
+                'raw_ocr_text' => $isSuccess ? ($result['rawText'] ?? $result['raw_text'] ?? null) : ($result['rawText'] ?? null),
                 'processing_error' => $isSuccess ? null : ($result['error'] ?? 'Unknown error'),
+                'document_type' => $docType,
             ];
 
             $this->labReport->update($updateData);
@@ -188,21 +192,31 @@ class ProcessSingleLabReport implements ShouldQueue
     /**
      * Normalize extracted data from Python script output.
      *
-     * The Python OCR script may return test results in two formats:
-     * - New grouped format: { "test_results": { "biochemistry": [...], "hematology": [...] } }
-     * - Legacy flat format: { "testResults": [ { "category": "...", ... }, ... ] }
-     *
-     * Normalizes both into the flat "testResults" format expected by the frontend and backend.
+     * Handles three formats:
+     * - Lab report grouped: { "test_results": { "biochemistry": [...] } } → flat testResults
+     * - Lab report flat: { "testResults": [...] } → pass through
+     * - Consultation form: { "document_classification": "Consultation_Form", "patient_header": {...}, ... }
+     *   → normalized to { "documentType": "consultation", "patientInfo": {...}, "consultationInfo": {...}, ... }
      */
     private function normalizeExtractedData(array $result): array
     {
+        // Detect consultation form from clinex_ocr_v2.py output
+        $classification = $result['document_classification'] ?? null;
+        if ($classification === 'Consultation_Form') {
+            return $this->normalizeConsultationData($result);
+        }
+
+        // Carry document type for lab reports
+        $result['documentType'] = 'lab_report';
+
         // Already has flat testResults — nothing to do
         if (isset($result['testResults']) && is_array($result['testResults'])) {
             return $result;
         }
 
         // Has grouped test_results — flatten into testResults
-        $groupedResults = $result['test_results'] ?? null;
+        // Also handle panels from clinex_ocr_v2.py
+        $groupedResults = $result['test_results'] ?? $result['panels'] ?? $result['panel_results'] ?? null;
         if (is_array($groupedResults)) {
             $flatTests = [];
             foreach ($groupedResults as $panel => $tests) {
@@ -216,16 +230,155 @@ class ProcessSingleLabReport implements ShouldQueue
                     if (empty($test['category'])) {
                         $test['category'] = strtoupper($panel);
                     }
+                    // Normalize clinex_ocr_v2.py key names to frontend format
+                    if (isset($test['test_name']) && !isset($test['testName'])) {
+                        $test['testName'] = $test['test_name'];
+                        unset($test['test_name']);
+                    }
+                    if (isset($test['reference_range']) && !isset($test['referenceRange'])) {
+                        $test['referenceRange'] = $test['reference_range'];
+                        unset($test['reference_range']);
+                    }
+                    if (isset($test['value']) && !isset($test['result'])) {
+                        $test['result'] = $test['value'];
+                        unset($test['value']);
+                    }
                     $flatTests[] = $test;
                 }
             }
             $result['testResults'] = $flatTests;
             unset($result['test_results']);
+            unset($result['panel_results']);
+            unset($result['panels']);
         } else {
             $result['testResults'] = [];
         }
 
+        // Normalize clinex_ocr_v2.py patient_header → patientInfo
+        if (isset($result['patient_header']) && !isset($result['patientInfo'])) {
+            $header = $result['patient_header'];
+            $result['patientInfo'] = [
+                'name' => $header['patient_name'] ?? '',
+                'patientId' => $header['patient_id'] ?? '',
+                'age' => $header['age_string'] ?? '',
+                'gender' => $header['gender'] ?? '',
+                'phone' => '',
+            ];
+            unset($result['patient_header']);
+        }
+
+        // Normalize clinex_ocr_v2.py report_metadata → labInfo
+        if (isset($result['report_metadata']) && !isset($result['labInfo'])) {
+            $meta = $result['report_metadata'];
+            // requested_by / requested_date may be in patient_header (already consumed)
+            // or in report_metadata depending on version
+            $result['labInfo'] = [
+                'labId' => $meta['lab_id'] ?? '',
+                'requestedBy' => $result['patientInfo']['requestedBy']
+                    ?? $meta['requested_by']
+                    ?? ($result['patient_header']['requested_by'] ?? ''),
+                'requestedDate' => $meta['requested_date']
+                    ?? ($result['patient_header']['requested_date'] ?? ''),
+                'collectedDate' => $meta['collected_timestamp'] ?? $meta['collected_date'] ?? '',
+                'analysisDate' => $meta['analysis_timestamp'] ?? $meta['analysis_date'] ?? '',
+                'validatedBy' => $meta['technician_name_khmer'] ?? $meta['validated_by'] ?? '',
+            ];
+            unset($result['report_metadata']);
+        }
+
         return $result;
+    }
+
+    /**
+     * Normalize consultation form data from clinex_ocr_v2.py output.
+     */
+    private function normalizeConsultationData(array $result): array
+    {
+        $header = $result['patient_header'] ?? [];
+        $vitalSigns = $result['vital_signs'] ?? [];
+        $clinical = $result['clinical_records'] ?? [];
+        $routing = $result['treatment_routing'] ?? [];
+
+        // Extract gender letter from gender_raw (e.g. "ប្រុស/M" → "M")
+        $genderRaw = $header['gender_raw'] ?? $header['gender'] ?? '';
+        $gender = $genderRaw;
+        if (preg_match('/([MF])$/i', $genderRaw, $gm)) {
+            $gender = strtoupper($gm[1]);
+        }
+
+        $normalized = [
+            'documentType' => 'consultation',
+            'rawText' => $result['raw_text'] ?? null,
+            'patientInfo' => [
+                'name' => $header['patient_name_khmer'] ?? $header['name_khmer'] ?? '',
+                'patientId' => '',
+                'age' => $header['age_string_raw'] ?? $header['age_string'] ?? '',
+                'gender' => $gender,
+                'phone' => '',
+            ],
+            'consultationInfo' => [
+                'paymentType' => $header['payment_type'] ?? '',
+                'physician' => $header['attending_physician'] ?? '',
+                'evaluateAt' => $header['evaluation_timestamp'] ?? '',
+            ],
+            'vitalSigns' => [
+                'systolicBp' => $vitalSigns['systolic_bp'] ?? '',
+                'diastolicBp' => $vitalSigns['diastolic_bp'] ?? '',
+                'pulse' => $vitalSigns['pulse'] ?? '',
+                'respiratoryRate' => $vitalSigns['respiratory_rate'] ?? '',
+                'temperature' => $vitalSigns['temperature_celsius'] ?? '',
+                'o2Saturation' => $vitalSigns['o2_saturation_percentage'] ?? '',
+                'height' => $vitalSigns['height_cm'] ?? '',
+                'weight' => $vitalSigns['weight_kg'] ?? '',
+            ],
+            'clinicalRecords' => [
+                'chiefComplaint' => $clinical['chief_complaint_raw'] ?? '',
+                'currentMedications' => $clinical['current_medications'] ?? '',
+                'evaluationSummary' => $clinical['evaluation_summary'] ?? '',
+            ],
+            'treatmentPlan' => [],
+        ];
+
+        // treatment_routing is now an array of {type, code} from v2
+        if (is_array($routing)) {
+            foreach ($routing as $item) {
+                if (is_array($item) && !empty($item['code'])) {
+                    // New format: [{type: "Prescription", code: "PRE001226"}, ...]
+                    $normalized['treatmentPlan'][] = [
+                        'type' => $item['type'] ?? 'Unknown',
+                        'code' => $item['code'],
+                    ];
+                } elseif (is_string($item)) {
+                    // Shouldn't happen, but safety
+                    continue;
+                } else {
+                    // Old dict format fallback: {prescription_id: "PRE001226", ...}
+                    // This branch handles legacy data
+                }
+            }
+            // If routing was a dict (old format), handle it
+            if (empty($normalized['treatmentPlan']) && !isset($routing[0])) {
+                $typeMap = [
+                    'prescription_id' => 'Prescription',
+                    'laboratory_order_id' => 'Laboratory',
+                    'echography_order_id' => 'Echography',
+                    'xray_order_id' => 'Xray',
+                    'ecg_order_id' => 'ECG',
+                    'ent_endoscopy_order_id' => 'ENT Endoscopy',
+                ];
+                foreach ($routing as $key => $code) {
+                    if ($code) {
+                        $type = $typeMap[$key] ?? ucfirst(str_replace('_order_id', '', str_replace('_id', '', $key)));
+                        $normalized['treatmentPlan'][] = [
+                            'type' => $type,
+                            'code' => $code,
+                        ];
+                    }
+                }
+            }
+        }
+
+        return $normalized;
     }
 
     /**

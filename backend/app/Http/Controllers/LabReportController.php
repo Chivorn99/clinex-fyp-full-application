@@ -320,13 +320,29 @@ class LabReportController extends Controller
             ], 422);
         }
 
-        $request->validate([
-            'verified_data' => 'required|array',
-            'verified_data.patientInfo' => 'required|array',
-            'verified_data.labInfo' => 'required|array',
-            'verified_data.testResults' => 'required|array',
-            'notes' => 'nullable|string|max:1000'
-        ]);
+        $verifiedData = $request->verified_data;
+        $documentType = $verifiedData['documentType'] ?? 'lab_report';
+
+        // Validate based on document type
+        if ($documentType === 'consultation') {
+            $request->validate([
+                'verified_data' => 'required|array',
+                'verified_data.patientInfo' => 'required|array',
+                'verified_data.consultationInfo' => 'nullable|array',
+                'verified_data.vitalSigns' => 'nullable|array',
+                'verified_data.clinicalRecords' => 'nullable|array',
+                'verified_data.treatmentPlan' => 'nullable|array',
+                'notes' => 'nullable|string|max:1000'
+            ]);
+        } else {
+            $request->validate([
+                'verified_data' => 'required|array',
+                'verified_data.patientInfo' => 'required|array',
+                'verified_data.labInfo' => 'required|array',
+                'verified_data.testResults' => 'required|array',
+                'notes' => 'nullable|string|max:1000'
+            ]);
+        }
 
         DB::beginTransaction();
 
@@ -335,9 +351,13 @@ class LabReportController extends Controller
 
             $patient = $this->createOrUpdatePatient($verifiedData['patientInfo']);
 
-            $labInfo = $this->storeLabInfo($labReport, $verifiedData['labInfo']);
-
-            $this->storeTestResults($labReport, $verifiedData['testResults']);
+            if ($documentType === 'consultation') {
+                // Store consultation data as special categories in extracted_data
+                $this->storeConsultationData($labReport, $verifiedData);
+            } else {
+                $labInfo = $this->storeLabInfo($labReport, $verifiedData['labInfo']);
+                $this->storeTestResults($labReport, $verifiedData['testResults']);
+            }
 
             $labReport->update([
                 'patient_id' => $patient->id,
@@ -375,13 +395,14 @@ class LabReportController extends Controller
             Log::info('Lab report verified successfully', [
                 'lab_report_id' => $labReport->id,
                 'patient_id' => $patient->id,
+                'document_type' => $documentType,
                 'verified_by' => auth()->id()
             ]);
 
             return response()->json([
                 'success' => true,
                 'data' => $labReport->fresh(['patient', 'batch']),
-                'message' => 'Lab report verified and stored successfully'
+                'message' => ($documentType === 'consultation' ? 'Consultation form' : 'Lab report') . ' verified and stored successfully'
             ]);
 
         } catch (\Exception $e) {
@@ -397,6 +418,119 @@ class LabReportController extends Controller
                 'message' => 'Verification failed: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Store consultation form data as special categories in extracted_data table.
+     */
+    private function storeConsultationData($labReport, $verifiedData)
+    {
+        ExtractedData::where('lab_report_id', $labReport->id)->delete();
+
+        // Store vital signs
+        $vitalSigns = $verifiedData['vitalSigns'] ?? [];
+        $vitalSignsMap = [
+            'systolicBp' => 'Systolic BP',
+            'diastolicBp' => 'Diastolic BP',
+            'pulse' => 'Pulse',
+            'respiratoryRate' => 'Respiratory Rate',
+            'temperature' => 'Temperature',
+            'o2Saturation' => 'O2 Saturation',
+            'height' => 'Height',
+            'weight' => 'Weight',
+        ];
+        foreach ($vitalSignsMap as $key => $testName) {
+            if (!empty($vitalSigns[$key])) {
+                ExtractedData::create([
+                    'lab_report_id' => $labReport->id,
+                    'category' => 'VITAL_SIGNS',
+                    'test_name' => $testName,
+                    'result' => $vitalSigns[$key],
+                    'unit' => null,
+                    'reference' => null,
+                    'flag' => null,
+                    'confidence_score' => 1.0,
+                    'is_verified' => true,
+                ]);
+            }
+        }
+
+        // Store clinical records
+        $clinical = $verifiedData['clinicalRecords'] ?? [];
+        $clinicalMap = [
+            'chiefComplaint' => 'Chief Complaint',
+            'currentMedications' => 'Current Medications',
+            'evaluationSummary' => 'Evaluation Summary',
+        ];
+        foreach ($clinicalMap as $key => $testName) {
+            if (!empty($clinical[$key])) {
+                ExtractedData::create([
+                    'lab_report_id' => $labReport->id,
+                    'category' => 'CLINICAL_RECORDS',
+                    'test_name' => $testName,
+                    'result' => $clinical[$key],
+                    'unit' => null,
+                    'reference' => null,
+                    'flag' => null,
+                    'confidence_score' => 1.0,
+                    'is_verified' => true,
+                ]);
+            }
+        }
+
+        // Store treatment plan
+        $treatmentPlan = $verifiedData['treatmentPlan'] ?? [];
+        foreach ($treatmentPlan as $item) {
+            if (!empty($item['code'])) {
+                ExtractedData::create([
+                    'lab_report_id' => $labReport->id,
+                    'category' => 'TREATMENT_PLAN',
+                    'test_name' => $item['type'] ?? 'Unknown',
+                    'result' => $item['code'],
+                    'unit' => null,
+                    'reference' => null,
+                    'flag' => null,
+                    'confidence_score' => 1.0,
+                    'is_verified' => true,
+                ]);
+            }
+        }
+
+        // Store consultation info
+        $consultInfo = $verifiedData['consultationInfo'] ?? [];
+        $consultMap = [
+            'paymentType' => 'Payment Type',
+            'physician' => 'Physician',
+            'evaluateAt' => 'Evaluate At',
+        ];
+        foreach ($consultMap as $key => $testName) {
+            if (!empty($consultInfo[$key])) {
+                ExtractedData::create([
+                    'lab_report_id' => $labReport->id,
+                    'category' => 'CONSULTATION_INFO',
+                    'test_name' => $testName,
+                    'result' => $consultInfo[$key],
+                    'unit' => null,
+                    'reference' => null,
+                    'flag' => null,
+                    'confidence_score' => 1.0,
+                    'is_verified' => true,
+                ]);
+            }
+        }
+
+        // Also store lab info equivalent for consultation
+        ExtractedLabInfo::updateOrCreate(
+            ['lab_report_id' => $labReport->id],
+            [
+                'lab_id' => '',
+                'requested_by' => $consultInfo['physician'] ?? '',
+                'requested_date' => $this->parseDate($consultInfo['evaluateAt'] ?? ''),
+                'collected_date' => null,
+                'analysis_date' => null,
+                'validated_by' => '',
+            ]
+        );
     }
 
     /**
