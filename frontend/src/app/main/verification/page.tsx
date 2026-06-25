@@ -332,10 +332,15 @@ export default function VerificationPage() {
         pdfUrl: "",
         documentType: docType,
         patientInfo: {
-          name: extractedData?.patientInfo?.name || "",
+          name: extractedData?.patientInfo?.name || (extractedData as any)?.patient_demographics?.name_khmer || (extractedData as any)?.patient_demographics?.name || "",
           patientId: extractedData?.patientInfo?.patientId || "",
-          age: extractedData?.patientInfo?.age || "",
-          gender: extractedData?.patientInfo?.gender || "",
+          age: extractedData?.patientInfo?.age || (() => {
+            const a = (extractedData as any)?.patient_demographics?.age;
+            if (typeof a === 'string') return a;
+            if (a && typeof a === 'object') return `${a.years || 0} Y, ${a.months || 0} M, ${a.days || 0} D`;
+            return "";
+          })(),
+          gender: extractedData?.patientInfo?.gender || (extractedData as any)?.patient_demographics?.gender || "",
           phone: extractedData?.patientInfo?.phone || "",
         },
         labInfo: {
@@ -379,26 +384,32 @@ export default function VerificationPage() {
         // Consultation-specific fields
         ...(docType === 'consultation' ? {
           consultationInfo: {
-            paymentType: extractedData?.consultationInfo?.paymentType || "",
-            physician: extractedData?.consultationInfo?.physician || "",
-            evaluateAt: extractedData?.consultationInfo?.evaluateAt || "",
+            paymentType: extractedData?.consultationInfo?.paymentType || (extractedData as any)?.patient_demographics?.payment_type || "",
+            physician: extractedData?.consultationInfo?.physician || (extractedData as any)?.physician || "",
+            evaluateAt: extractedData?.consultationInfo?.evaluateAt || (extractedData as any)?.evaluation_date || "",
           },
           vitalSigns: {
-            systolicBp: extractedData?.vitalSigns?.systolicBp || "",
-            diastolicBp: extractedData?.vitalSigns?.diastolicBp || "",
-            pulse: extractedData?.vitalSigns?.pulse || "",
-            respiratoryRate: extractedData?.vitalSigns?.respiratoryRate || "",
-            temperature: extractedData?.vitalSigns?.temperature || "",
-            o2Saturation: extractedData?.vitalSigns?.o2Saturation || "",
-            height: extractedData?.vitalSigns?.height || "",
-            weight: extractedData?.vitalSigns?.weight || "",
+            systolicBp: extractedData?.vitalSigns?.systolicBp || (extractedData as any)?.vital_signs?.systolic_mmhg || "",
+            diastolicBp: extractedData?.vitalSigns?.diastolicBp || (extractedData as any)?.vital_signs?.diastolic_mmhg || "",
+            pulse: extractedData?.vitalSigns?.pulse || (extractedData as any)?.vital_signs?.pulse_bpm || "",
+            respiratoryRate: extractedData?.vitalSigns?.respiratoryRate || (extractedData as any)?.vital_signs?.respiratory_rate_per_mn || "",
+            temperature: extractedData?.vitalSigns?.temperature || (extractedData as any)?.vital_signs?.temperature_celsius || "",
+            o2Saturation: extractedData?.vitalSigns?.o2Saturation || (extractedData as any)?.vital_signs?.oxygen_saturation_percentage || "",
+            height: extractedData?.vitalSigns?.height || (extractedData as any)?.vital_signs?.height_cm || "",
+            weight: extractedData?.vitalSigns?.weight || (extractedData as any)?.vital_signs?.weight_kg || "",
           },
           clinicalRecords: {
-            chiefComplaint: extractedData?.clinicalRecords?.chiefComplaint || "",
-            currentMedications: extractedData?.clinicalRecords?.currentMedications || "",
-            evaluationSummary: extractedData?.clinicalRecords?.evaluationSummary || "",
+            chiefComplaint: extractedData?.clinicalRecords?.chiefComplaint || (extractedData as any)?.clinical_notes?.chief_complaint || "",
+            currentMedications: extractedData?.clinicalRecords?.currentMedications || (extractedData as any)?.clinical_notes?.current_medications || "",
+            evaluationSummary: extractedData?.clinicalRecords?.evaluationSummary || (extractedData as any)?.clinical_notes?.chief_complaint || "",
           },
-          treatmentPlan: extractedData?.treatmentPlan || [],
+          treatmentPlan: Array.isArray(extractedData?.treatmentPlan)
+            ? extractedData.treatmentPlan
+            : (extractedData as any)?.treatment_plan
+              ? Object.entries((extractedData as any).treatment_plan)
+                  .filter(([_, v]) => v != null && v !== "")
+                  .map(([k, v]) => ({ type: k, code: String(v) }))
+              : [],
         } : {}),
         extracted_data: extractedData,
         original_filename: labReport.original_filename,

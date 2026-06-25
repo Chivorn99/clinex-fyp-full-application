@@ -1537,7 +1537,7 @@ class ConsultationReportParser:
         # ── Clinical notes ──
         chief_complaint = None
         cc_match = re.search(
-            r'(?:Chief\s*Complaint|Motif|CC)\s*:?\s*(.+?)(?=\n|Current|Medication|$)',
+            r'(?:Chief\s*Complain(?:t)?|Motif|CC|Summary)\s*:?\s*(.+?)(?=\n|Current|Medication|Evaluation|Treatment|$)',
             text, re.IGNORECASE
         )
         if cc_match:
@@ -1545,22 +1545,24 @@ class ConsultationReportParser:
 
         current_medications = None
         med_match = re.search(
-            r'(?:Current\s*Medications?|Traitement|Médicaments)\s*:?\s*(.+?)(?=\n|Prescription|Laboratory|$)',
+            r'(?:Current\s*Medications?|Traitement|Médicaments)\s*:?\s*(.+?)(?=\n|Prescription|Laboratory|Treatment|$)',
             text, re.IGNORECASE
         )
         if med_match:
             current_medications = med_match.group(1).strip()
 
         # ── Treatment plan ──
-        prescription_id = None
-        rx_match = re.search(r'(?:Prescription\s*ID|RX)\s*:?\s*(\S+)', text, re.IGNORECASE)
-        if rx_match:
-            prescription_id = rx_match.group(1).strip()
+        treatment_plan = {}
+        for tp_match in re.finditer(r'(Laboratory|Echography|Xray|ECG|ENT Endoscopy|Prescription|Pharmacy|Endoscopy)\s*:?\s*(PAR\d+|PRE\d+|\S+00\d+)', text, re.IGNORECASE):
+            treatment_plan[tp_match.group(1).strip()] = tp_match.group(2).strip()
 
-        laboratory_id = None
+        rx_match = re.search(r'(?:Prescription\s*ID|RX)\s*:?\s*(\S+)', text, re.IGNORECASE)
+        if rx_match and 'Prescription' not in treatment_plan:
+            treatment_plan['Prescription'] = rx_match.group(1).strip()
+
         lab_match = re.search(r'(?:Laboratory\s*ID|Lab\s*ID)\s*:?\s*(LT\d+|\S+)', text, re.IGNORECASE)
-        if lab_match:
-            laboratory_id = lab_match.group(1).strip()
+        if lab_match and 'Laboratory' not in treatment_plan:
+            treatment_plan['Laboratory'] = lab_match.group(1).strip()
 
         return {
             'hospital_name': hospital_name,
@@ -1587,10 +1589,7 @@ class ConsultationReportParser:
                 'chief_complaint': chief_complaint,
                 'current_medications': current_medications,
             },
-            'treatment_plan': {
-                'prescription_id': prescription_id,
-                'laboratory_id': laboratory_id,
-            },
+            'treatment_plan': treatment_plan,
         }
 
     def _find_vital(self, text: str, keywords: List[str]) -> Optional[str]:
