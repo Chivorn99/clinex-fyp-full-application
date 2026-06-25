@@ -2507,7 +2507,8 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
         # Fallback to regex parser if LLM failed or no template
         if result is None:
             doc_type = document_type or detect_document_type(ocr_text)
-            if doc_type == 'consultation':
+            is_consult = doc_type in ('consultation', 'Patient Consultation Information') or (detect_document_type(ocr_text) == 'consultation')
+            if is_consult:
                 parser = ConsultationReportParser()
                 result = parser.parse_optimized(ocr_text)
                 result = validate_consultation_extraction(result)
@@ -2519,7 +2520,8 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
         elif template:
             # Re-run correct validator for LLM output
             doc_type = document_type or detect_document_type(ocr_text)
-            if doc_type == 'consultation':
+            is_consult = doc_type in ('consultation', 'Patient Consultation Information') or (detect_document_type(ocr_text) == 'consultation')
+            if is_consult:
                 result = validate_consultation_extraction(result)
 
         result['source_file'] = os.path.basename(file_path)
@@ -2532,8 +2534,9 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
         # ── Normalize consultation data into the frontend-expected format ──
         # The frontend verification page reads patientInfo, labInfo, testResults
         # but consultation forms store data as patient_demographics, vital_signs, etc.
-        doc_type_final = document_type or detect_document_type(ocr_text)
-        if doc_type_final == 'consultation':
+        doc_type_final = document_type or (result.get('document_type') if isinstance(result, dict) else None) or detect_document_type(ocr_text)
+        is_consult_final = doc_type_final in ('consultation', 'Patient Consultation Information') or (detect_document_type(ocr_text) == 'consultation')
+        if is_consult_final:
             result = _normalize_consultation_to_frontend(result)
 
         return result

@@ -1117,7 +1117,8 @@ def process_file(file_path: str) -> Dict[str, Any]:
         result = _parse_lab_report(raw_text, file_source)
 
     # Attach raw text for debugging
-    result['_raw_text'] = raw_text
+    result['raw_text'] = raw_text
+    result['rawText'] = raw_text
 
     return result
 
@@ -1128,7 +1129,6 @@ def process_batch(file_paths: List[str], stream: bool = False) -> List[Dict[str,
     for fp in file_paths:
         try:
             result = process_file(fp)
-            result.pop('_raw_text', None)  # Don't include raw text in batch output
             if stream:
                 print(json.dumps(result, ensure_ascii=False), flush=True)
             else:
@@ -1172,7 +1172,6 @@ def main():
 
     if args.file:
         result = process_file(args.file)
-        result.pop('_raw_text', None)
         results = [result]
     elif args.batch:
         batch_dir = Path(args.batch)

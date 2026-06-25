@@ -1,42 +1,291 @@
-FI:NĊIAMSKĦYĊI
-SNAK
+naj 625
 62
-Besimajipat
+og
+KV Hospital
+032
 K+
+ñŝaj ŝanɲmruññist på:nugino šaim:ġkoncıná uġjunpannu
+hniewiu:ga 1:máquumīn ŝawňspans g:pin:im:1]s imwmsminümü äsj
+IHņiūnánúiðu ünijs fu µmw ñjs ji is ŝhusiwn U.N.N¶
 HOSPITAL
-Patient Consultation Information
-Patient
-: Mice Soksan
-Payment Type
-: GIS
-Age
-: 36 /year, 5 18/month, 4 t/day Gender
-: M
-Physician
+in:/Name
+: Kaun KimLang
+inti/Age
+: 24 Y, 10 M, 29 D
+Ing/Gender
+: Female
+Patient ID
+: PT002047
+Lab ID
+: LT001336
+Requested Date
+: 31/03/2024 08:46
+Collected Date
+: 31/03/2024 11:07
+Analysis Date
+: 31/03/2024 11:07
+Requested By
 : Dr. LEANG Choeu
-Evaluate at
-: 31/03/2024 09:24
-un (Vital signs)
-îíîÙîÿí (Chief complain)
-Check Up GIS
-Evaluation
-Evaluation Summary
-Check Up GIS
-Treatment Plan
-Laboratory
-PAR004316
-Echography
-PAR004317
-Xray
-PAR004318
-ECG
-PAR004319
-ENT Endoscopy
-PAR004320
-ìý § .………….…….….…. ..….….…….….…….……...mi
-Physician's Name
-Dr. LEANG Choeu
-31
-2024 09:2
-mawis: nueniumi wjšinēšu prinajuw teġġjaw (vynwňanskij ñ.8)
-î: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
+LABORATORY REPORT
+BIOCHIMISTRY
+Results
+Unit
+Reference Range
+Flag
+Creatinine, serum
+:
+0.7
+mg/dL
+(0.9
+1.1)
+L
+Urea/BUN
+:
+26
+mg/dL
+(6.0 40.0 )
+Glucose
+:
+81
+mg/dL
+(75-115)
+Cholesterole Total
+:
+146
+mg/dL
+(0
+-
+- 200)
+Cholesterol-HDL
+:
+66
+mg/dL
+(>60)
+Cholesterol-LDL
+:
+45
+-
+mg/dL
+(0
+$150)
+Tryglyceride
+:
+108
+mg/dL
+(0
+-
+. 150)
+Uric acide
+:
+4.5
+mg/dL
+(3.5 - 6.0)
+ENZYMOLOGY
+Results
+Unit
+Reference Range
+Flag
+TRANSAMINASE
+SGPT/ALT
+:
+17
+U/L
+(0
+41)
+SGOT/AST
+27
+U/L
+(0
+(40)
+Validated By:
+Lab Technician:
+e
+NATÜümess
+2024-03-31 11:22
+2024-03-31 11:22
+mawhs: qûqniumi wžinéšu [ñġjaw iaġnjaw (vynwñanskunjnm b ñ.8)
+: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
+naj 625
+62
+SIGBJ
+KV Hospital
+og
+032
+K+
+ñŝaj ŝanɲmruññist på:nugino šaim:ġkoncıná uġjunpannu
+hniewiu:ga 1:máquumīn ŝawňspans g:pin:im:1]s imwmsminümü äsj
+IHņiūnánúiðu ünijs fu µmw ñjs ji is ŝhusiwn U.N.N¶
+HOSPITAL
+in:/Name
+: Kaun KimLang
+inti/Age
+: 24 Y, 10 M, 29 D
+Ing/Gender
+: Female
+Patient ID
+: PT002047
+Lab ID
+: LT001336
+Requested Date
+: 31/03/2024 08:46
+Collected Date
+: 31/03/2024 11:07
+Analysis Date
+: 31/03/2024 11:07
+Requested By
+: Dr. LEANG Choeu
+LABORATORY REPORT
+HEMATOLOGY
+Results
+Unit
+Reference Range
+Flag
+CBC
+WBC
+:
+5.7
+10⁹/L
+(3.5-10.0)
+LYM%
+:
+32.1
+응
+(15.0-50.0)
+MONO%
+:
+7.7
+응
+(2.0-15.0)
+NUE%
+:
+60.2
+응
+(35.0-80.0)
+EOSINO%
+:
+11.6
+응
+(11.5-16.5)
+BASO%
+:
+25.4
+응
+(25.0-35.0)
+HGB
+:
+36.7
+g/dL
+(31.0-38.0)
+MCH
+:
+4.56
+pg
+(3.50-5.50)
+MCHC
+:
+69.2
+g/dL
+(75.0-100.0)
+L
+RBC
+:
+31.5
+X1012/L
+(35.0-55.0)
+L
+MCV
+: 158
+fl
+(150-400)
+Validated By:
+Lab Technician:
+e
+NATÜümess
+2024-03-31 11:22
+2024-03-31 11:22
+mawhs: qûqniumi wžinéšu [ñġjaw iaġnjaw (vynwñanskunjnm b ñ.8)
+: 097 840 47 89/ 012 89 17 45/ 012 28 60 70
+naj 625
+62
+og
+KV Hospital
+032
+K+
+ñŝaj ŝanɲmruññist på:nugino šaim:ġkoncıná uġjunpannu
+hniewiu:ga 1:máquumīn ŝawňspans g:pin:im:1]s imwmsminümü äsj
+IHņiūnánúiðu ünijs fu µmw ñjs ji is ŝhusiwn U.N.N¶
+HOSPITAL
+in:/Name
+: Kaun KimLang
+inti/Age
+: 24 Y, 10 M, 29 D
+Ing/Gender
+: Female
+Patient ID
+: PT002047
+Lab ID
+: LT001336
+Requested Date
+: 31/03/2024 08:46
+Collected Date
+: 31/03/2024 11:07
+Analysis Date
+: 31/03/2024 11:07
+Requested By
+: Dr. LEANG Choeu
+LABORATORY REPORT
+URINE ANALYSIS
+Results
+Unit
+Reference Range
+Flag
+URINE ANALYSIS 11 TEST
+LEU
+:
+NEGATIVE
+Leu/μL
+NIT
+:
+NEGATIVE
+URO
+:
+0.2
+mg/dL
+PRO
+:
+NEGATIVE
+mg/dL
+PH
+:
+6.5
+BLO
+:
+NEGATIVE
+Ery/μl
+SG
+:
+1.010
+KET
+:
+NEGATIVE
+mg/dL
+BIL
+:
+NEGATIVE
+mg/dL
+GLU
+:
+NEGATIVE
+mg/dL
+ASC
+:
+NEGATIVE
+mg/dL
+Validated By:
+Lab Technician:
+e
+NATÜümess
+2024-03-31 11:22
+2024-03-31 11:22
+mawhs: qûqniumi wžinéšu [ñġjaw iaġnjaw (vynwñanskunjnm b ñ.8)
+: 097 840 47 89/ 012 89 17 45/ 012 28 60 70

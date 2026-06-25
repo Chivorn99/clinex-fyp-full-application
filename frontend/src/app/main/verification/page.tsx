@@ -307,15 +307,17 @@ export default function VerificationPage() {
       labReport: BackendLabReport,
       extractedData?: BackendExtractedData,
     ): ProcessedReport => {
-      const rawOcrText = labReport.raw_ocr_text || extractedData?.rawText || "";
+      const rawOcrText = labReport.raw_ocr_text || extractedData?.rawText || (extractedData as any)?.raw_text || (extractedData as any)?._raw_text || "";
 
       // Determine document type from backend field or extracted data
-      const docType: 'lab_report' | 'consultation' =
-        labReport.document_type === 'consultation'
-          ? 'consultation'
-          : extractedData?.documentType === 'consultation'
-            ? 'consultation'
-            : 'lab_report';
+      const isConsult =
+        labReport.document_type === 'consultation' ||
+        labReport.document_type === 'Patient Consultation Information' ||
+        extractedData?.documentType === 'consultation' ||
+        extractedData?.documentType === 'Patient Consultation Information' ||
+        (extractedData as any)?.document_type === 'Patient Consultation Information';
+
+      const docType: 'lab_report' | 'consultation' = isConsult ? 'consultation' : 'lab_report';
 
       const transformed: ProcessedReport = {
         id: labReport.id.toString(),
