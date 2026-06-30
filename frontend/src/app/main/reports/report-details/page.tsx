@@ -282,6 +282,26 @@ export default function ReportDetailsPage() {
         }
     }
 
+    // Helper: detect missing/empty values
+    const isMissing = (value: string | null | undefined): boolean => {
+        if (!value) return true
+        const v = value.trim().toLowerCase()
+        return v === '' || v === 'n/a' || v === '—' || v === '-' || v === 'not provided' || v === 'not extracted' || v === 'not recorded'
+    }
+
+    // Helper: render a value with amber highlight if missing
+    const renderValue = (value: string | null | undefined, fallback = 'N/A') => {
+        const display = value && value.trim() ? value : fallback
+        if (isMissing(value)) {
+            return (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">
+                    {display}
+                </span>
+            )
+        }
+        return display
+    }
+
     const getTestResultFlag = (flag: string | null) => {
         if (flag === "HIGH" || flag === "H") {
             return (
@@ -623,25 +643,25 @@ export default function ReportDetailsPage() {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-500">Patient Name</label>
-                                            <p className="mt-1 text-sm text-gray-900">{reportData.patientInfo.name || 'Not extracted'}</p>
+                                            <p className="mt-1 text-sm text-gray-900">{renderValue(reportData.patientInfo.name)}</p>
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-500">Patient ID</label>
-                                            <p className="mt-1 text-sm text-gray-900">{reportData.patientInfo.patientId}</p>
+                                            <p className="mt-1 text-sm text-gray-900">{renderValue(reportData.patientInfo.patientId)}</p>
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-500">Age</label>
-                                            <p className="mt-1 text-sm text-gray-900">{reportData.patientInfo.age}</p>
+                                            <p className="mt-1 text-sm text-gray-900">{renderValue(reportData.patientInfo.age)}</p>
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-500">Gender</label>
-                                            <p className="mt-1 text-sm text-gray-900">{reportData.patientInfo.gender}</p>
+                                            <p className="mt-1 text-sm text-gray-900">{renderValue(reportData.patientInfo.gender)}</p>
                                         </div>
                                         <div className="col-span-2">
                                             <label className="block text-sm font-medium text-gray-500">Phone Number</label>
                                             <p className="mt-1 text-sm text-gray-900 flex items-center">
                                                 <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                                                {reportData.patientInfo.phone || 'Not provided'}
+                                                {renderValue(reportData.patientInfo.phone, 'Not provided')}
                                             </p>
                                         </div>
                                     </div>
@@ -661,18 +681,18 @@ export default function ReportDetailsPage() {
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="col-span-2">
                                                 <label className="block text-sm font-medium text-gray-500">Physician</label>
-                                                <p className="mt-1 text-sm text-gray-900">{reportData.consultationInfo?.physician || 'N/A'}</p>
+                                                <p className="mt-1 text-sm text-gray-900">{renderValue(reportData.consultationInfo?.physician)}</p>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-500">Evaluation Date</label>
                                                 <p className="mt-1 text-sm text-gray-900 flex items-center">
                                                     <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                                                    {reportData.consultationInfo?.evaluateAt || 'N/A'}
+                                                    {renderValue(reportData.consultationInfo?.evaluateAt)}
                                                 </p>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-500">Payment Type</label>
-                                                <p className="mt-1 text-sm text-gray-900">{reportData.consultationInfo?.paymentType || 'N/A'}</p>
+                                                <p className="mt-1 text-sm text-gray-900">{renderValue(reportData.consultationInfo?.paymentType)}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -694,36 +714,36 @@ export default function ReportDetailsPage() {
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-500">Lab ID</label>
-                                                <p className="mt-1 text-sm text-gray-900">{reportData.labInfo.labId}</p>
+                                                <p className="mt-1 text-sm text-gray-900">{renderValue(reportData.labInfo.labId)}</p>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-500">Requested By</label>
-                                                <p className="mt-1 text-sm text-gray-900">{reportData.labInfo.requestedBy}</p>
+                                                <p className="mt-1 text-sm text-gray-900">{renderValue(reportData.labInfo.requestedBy)}</p>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-500">Requested Date</label>
                                                 <p className="mt-1 text-sm text-gray-900 flex items-center">
                                                     <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                                                    {reportData.labInfo.requestedDate}
+                                                    {renderValue(reportData.labInfo.requestedDate)}
                                                 </p>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-500">Collected Date</label>
                                                 <p className="mt-1 text-sm text-gray-900 flex items-center">
                                                     <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                                                    {reportData.labInfo.collectedDate}
+                                                    {renderValue(reportData.labInfo.collectedDate)}
                                                 </p>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-500">Analysis Date</label>
                                                 <p className="mt-1 text-sm text-gray-900 flex items-center">
                                                     <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                                                    {reportData.labInfo.analysisDate}
+                                                    {renderValue(reportData.labInfo.analysisDate)}
                                                 </p>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-500">Validated By</label>
-                                                <p className="mt-1 text-sm text-gray-900">{reportData.labInfo.validatedBy}</p>
+                                                <p className="mt-1 text-sm text-gray-900">{renderValue(reportData.labInfo.validatedBy)}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -869,10 +889,10 @@ export default function ReportDetailsPage() {
                                                 <tbody className="bg-white divide-y divide-gray-200">
                                                     {tests.map((test, index) => (
                                                         <tr key={index}>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{test.testName}</td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{test.result}</td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{test.unit || 'N/A'}</td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{test.referenceRange || 'N/A'}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{renderValue(test.testName)}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{renderValue(test.result)}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{renderValue(test.unit)}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{renderValue(test.referenceRange)}</td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                                 {getTestResultFlag(test.flag)}
                                                             </td>
