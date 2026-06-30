@@ -1362,7 +1362,7 @@ export default function VerificationPage() {
                                 e.target.value,
                               )
                             }
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!value?.toString().trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder={`Enter ${key
                               .replace(/([A-Z])/g, " $1")
                               .trim()
@@ -1394,7 +1394,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.consultationInfo?.paymentType || ""}
                             onChange={(e) => updateConsultationInfo("paymentType", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.consultationInfo?.paymentType || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter payment type"
                           />
                         </div>
@@ -1406,7 +1406,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.consultationInfo?.physician || ""}
                             onChange={(e) => updateConsultationInfo("physician", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.consultationInfo?.physician || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter physician"
                           />
                         </div>
@@ -1418,7 +1418,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.consultationInfo?.evaluateAt || ""}
                             onChange={(e) => updateConsultationInfo("evaluateAt", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.consultationInfo?.evaluateAt || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter evaluation date/time"
                           />
                         </div>
@@ -1442,7 +1442,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.vitalSigns?.systolicBp || ""}
                             onChange={(e) => updateVitalSigns("systolicBp", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.vitalSigns?.systolicBp || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter systolic BP"
                           />
                         </div>
@@ -1454,7 +1454,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.vitalSigns?.diastolicBp || ""}
                             onChange={(e) => updateVitalSigns("diastolicBp", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.vitalSigns?.diastolicBp || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter diastolic BP"
                           />
                         </div>
@@ -1466,7 +1466,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.vitalSigns?.pulse || ""}
                             onChange={(e) => updateVitalSigns("pulse", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.vitalSigns?.pulse || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter pulse"
                           />
                         </div>
@@ -1478,7 +1478,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.vitalSigns?.respiratoryRate || ""}
                             onChange={(e) => updateVitalSigns("respiratoryRate", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.vitalSigns?.respiratoryRate || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter respiratory rate"
                           />
                         </div>
@@ -1490,7 +1490,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.vitalSigns?.temperature || ""}
                             onChange={(e) => updateVitalSigns("temperature", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.vitalSigns?.temperature || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter temperature"
                           />
                         </div>
@@ -1502,7 +1502,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.vitalSigns?.o2Saturation || ""}
                             onChange={(e) => updateVitalSigns("o2Saturation", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.vitalSigns?.o2Saturation || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter O2 saturation"
                           />
                         </div>
@@ -1514,7 +1514,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.vitalSigns?.height || ""}
                             onChange={(e) => updateVitalSigns("height", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.vitalSigns?.height || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter height"
                           />
                         </div>
@@ -1526,7 +1526,7 @@ export default function VerificationPage() {
                             type="text"
                             value={selectedReport.vitalSigns?.weight || ""}
                             onChange={(e) => updateVitalSigns("weight", e.target.value)}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.vitalSigns?.weight || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter weight"
                           />
                         </div>
@@ -1550,7 +1550,7 @@ export default function VerificationPage() {
                             value={selectedReport.clinicalRecords?.chiefComplaint || ""}
                             onChange={(e) => updateClinicalRecords("chiefComplaint", e.target.value)}
                             rows={3}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.clinicalRecords?.chiefComplaint || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter chief complaint"
                           />
                         </div>
@@ -1562,7 +1562,7 @@ export default function VerificationPage() {
                             value={selectedReport.clinicalRecords?.currentMedications || ""}
                             onChange={(e) => updateClinicalRecords("currentMedications", e.target.value)}
                             rows={3}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.clinicalRecords?.currentMedications || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter current medications"
                           />
                         </div>
@@ -1574,7 +1574,7 @@ export default function VerificationPage() {
                             value={selectedReport.clinicalRecords?.evaluationSummary || ""}
                             onChange={(e) => updateClinicalRecords("evaluationSummary", e.target.value)}
                             rows={3}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!(selectedReport.clinicalRecords?.evaluationSummary || '').trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                             placeholder="Enter evaluation summary"
                           />
                         </div>
@@ -1658,7 +1658,7 @@ export default function VerificationPage() {
                                       onChange={(e) =>
                                         updateTreatmentPlanItem(index, "type", e.target.value)
                                       }
-                                      className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                      className={`block w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!item.type?.trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                                       placeholder="Type"
                                     />
                                   </td>
@@ -1669,7 +1669,7 @@ export default function VerificationPage() {
                                       onChange={(e) =>
                                         updateTreatmentPlanItem(index, "code", e.target.value)
                                       }
-                                      className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                      className={`block w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!item.code?.trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                                       placeholder="Code"
                                     />
                                   </td>
@@ -1723,7 +1723,7 @@ export default function VerificationPage() {
                                     e.target.value,
                                   )
                                 }
-                                className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                className={`block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!value?.toString().trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                                 placeholder={`Enter ${key
                                   .replace(/([A-Z])/g, " $1")
                                   .trim()
@@ -1844,7 +1844,7 @@ export default function VerificationPage() {
                                               e.target.value,
                                             )
                                           }
-                                          className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                          className={`block w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!test.testName?.trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                                           placeholder="Test name"
                                         />
                                       </td>
@@ -1859,7 +1859,7 @@ export default function VerificationPage() {
                                               e.target.value,
                                             )
                                           }
-                                          className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                          className={`block w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!test.result?.trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                                           placeholder="Result"
                                         />
                                       </td>
@@ -1874,7 +1874,7 @@ export default function VerificationPage() {
                                               e.target.value,
                                             )
                                           }
-                                          className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                          className={`block w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!test.unit?.trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                                           placeholder="Unit"
                                         />
                                       </td>
@@ -1889,7 +1889,7 @@ export default function VerificationPage() {
                                               e.target.value,
                                             )
                                           }
-                                          className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                          className={`block w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 ${!test.referenceRange?.trim() ? 'bg-amber-50 border-amber-300' : 'border-gray-300'}`}
                                           placeholder="Reference range"
                                         />
                                       </td>
