@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Jobs\ProcessLabReport;
 use Illuminate\Validation\ValidationException;
 use App\Services\DocumentAiService;
+use App\Services\ExportService;
 use App\Models\Patient;
 use App\Models\ExtractedData;
 use App\Models\ExtractedLabInfo;
@@ -623,15 +624,42 @@ class LabReportController extends Controller
     }
 
     /**
-     * Export verified lab reports as CSV
+     * Export a single lab report as a styled XLSX file.
      */
-    public function exportVerifiedCsv(Request $request)
+    public function exportXlsx(Request $request)
     {
-        $query = LabReport::with(['patient', 'batch', 'extractedData', 'extractedLabInfo', 'verifier'])
-            ->where('status', 'verified')
+        $reportId = $request->query('report_id');
+
+        if (!$reportId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'report_id is required'
+            ], 422);
+        }
+
+        $report = LabReport::find($reportId);
+
+        if (!$report) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Report not found'
+            ], 404);
+        }
+
+        $exportService = app(ExportService::class);
+
+        return $exportService->exportSingleReport($report);
+    }
+
+    /**
+     * Export all verified reports as a styled XLSX file (with optional filters).
+     */
+    public function exportBulkXlsx(Request $request)
+    {
+        $query = LabReport::where('status', 'verified')
             ->whereNotNull('verified_at');
 
-        // Apply filters
+        // Apply optional filters
         if ($request->filled('batch_id')) {
             $query->where('batch_id', $request->batch_id);
         }
@@ -648,115 +676,18 @@ class LabReportController extends Controller
             $query->whereDate('verified_at', '<=', $request->date_to);
         }
 
-        $verifiedReports = $query->orderBy('verified_at', 'desc')->get();
+        $reports = $query->orderBy('verified_at', 'desc')->get();
 
-        if ($verifiedReports->isEmpty()) {
+        if ($reports->isEmpty()) {
             return response()->json([
                 'success' => false,
                 'message' => 'No verified reports found for export'
             ], 404);
         }
 
-        // Generate CSV content
-        $csvContent = $this->generateVerifiedReportsCsv($verifiedReports);
+        $exportService = app(ExportService::class);
 
-        $filename = 'verified_lab_reports_' . now()->format('Y-m-d_H-i-s') . '.csv';
-
-        return response($csvContent)
-            ->header('Content-Type', 'text/csv')
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"')
-            ->header('Content-Length', strlen($csvContent));
-    }
-
-    /**
-     * Generate CSV content for verified reports
-     */
-    private function generateVerifiedReportsCsv($reports)
-    {
-        $output = fopen('php://temp', 'r+');
-
-        // CSV Headers
-        $headers = [
-            'Report ID',
-            'Original Filename',
-            'Batch Name',
-            'Patient ID',
-            'Patient Name',
-            'Age',
-            'Gender',
-            'Phone',
-            'Lab ID',
-            'Requested By',
-            'Requested Date',
-            'Collected Date',
-            'Analysis Date',
-            'Validated By',
-            'Test Name',
-            'Result',
-            'Unit',
-            'Reference Range',
-            'Flag',
-            'Category',
-            'Verified By',
-            'Verified At',
-            'Notes'
-        ];
-
-        fputcsv($output, $headers);
-
-        foreach ($reports as $report) {
-            $baseData = [
-                'report_id' => $report->id,
-                'filename' => $report->original_filename,
-                'batch_name' => $report->batch->name ?? '',
-                'patient_id' => $report->patient->patient_id ?? '',
-                'patient_name' => $report->patient->name ?? '',
-                'age' => $report->patient->age ?? '',
-                'gender' => $report->patient->gender ?? '',
-                'phone' => $report->patient->phone ?? '',
-                'lab_id' => $report->extractedLabInfo->lab_id ?? '',
-                'requested_by' => $report->extractedLabInfo->requested_by ?? '',
-                'requested_date' => $report->extractedLabInfo->requested_date ?? '',
-                'collected_date' => $report->extractedLabInfo->collected_date ?? '',
-                'analysis_date' => $report->extractedLabInfo->analysis_date ?? '',
-                'validated_by' => $report->extractedLabInfo->validated_by ?? '',
-                'verified_by' => $report->verifier->name ?? '',
-                'verified_at' => $report->verified_at ? $report->verified_at->format('Y-m-d H:i:s') : '',
-                'notes' => $report->notes ?? ''
-            ];
-
-            // If report has test results, create a row for each test
-            if ($report->extractedData->isNotEmpty()) {
-                foreach ($report->extractedData as $testResult) {
-                    $row = array_merge($baseData, [
-                        'test_name' => $testResult->test_name,
-                        'result' => $testResult->result,
-                        'unit' => $testResult->unit ?? '',
-                        'reference_range' => $testResult->reference ?? '',
-                        'flag' => $testResult->flag ?? '',
-                        'category' => $testResult->category ?? ''
-                    ]);
-                    fputcsv($output, array_values($row));
-                }
-            } else {
-                // If no test results, create one row with empty test fields
-                $row = array_merge($baseData, [
-                    'test_name' => '',
-                    'result' => '',
-                    'unit' => '',
-                    'reference_range' => '',
-                    'flag' => '',
-                    'category' => ''
-                ]);
-                fputcsv($output, array_values($row));
-            }
-        }
-
-        rewind($output);
-        $csvContent = stream_get_contents($output);
-        fclose($output);
-
-        return $csvContent;
+        return $exportService->exportBulkReports($reports);
     }
 
     /**

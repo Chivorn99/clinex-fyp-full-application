@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { ArrowLeft, FileText, User, Calendar, Clock, Phone, CheckCircle, AlertTriangle, Download, Maximize, Minimize, FileDown } from 'lucide-react'
+import { ArrowLeft, FileText, User, Calendar, Clock, Phone, CheckCircle, AlertTriangle, Download, Maximize, Minimize, FileDown, Stethoscope, ClipboardList, Activity, Heart } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { apiClient } from '@/lib/api'
 
@@ -50,6 +50,28 @@ interface ReportData {
     patientInfo: PatientInfo
     labInfo: LabInfo
     testResults: TestResult[]
+    // Consultation-specific data
+    consultationInfo?: {
+        physician: string
+        evaluateAt: string
+        paymentType: string
+    }
+    clinicalRecords?: {
+        chiefComplaint: string
+        evaluationSummary: string
+        currentMedications: string
+    }
+    treatmentPlan?: Array<{ type: string; code: string }>
+    vitalSigns?: {
+        pulse: string
+        height: string
+        weight: string
+        systolicBp: string
+        diastolicBp: string
+        temperature: string
+        o2Saturation: string
+        respiratoryRate: string
+    }
 }
 
 interface ReportMetadata {
@@ -62,6 +84,7 @@ interface ReportMetadata {
     batchName: string
     uploaderName: string
     batchId?: number
+    documentType?: string
 }
 
 export default function ReportDetailsPage() {
@@ -75,7 +98,7 @@ export default function ReportDetailsPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string>('')
     const [isPreviewExpanded, setIsPreviewExpanded] = useState(false)
-    const [isExportingCsv, setIsExportingCsv] = useState(false)
+    const [isExporting, setIsExporting] = useState(false)
     const [pdfDataUrl, setPdfDataUrl] = useState<string>('')
     const [pdfLoading, setPdfLoading] = useState(true)
     const [pdfError, setPdfError] = useState<string>('')
@@ -101,6 +124,9 @@ export default function ReportDetailsPage() {
                 const labInfo = extractedData.labInfo ?? extractedData.lab_info ?? {}
                 const testResults = extractedData.testResults ?? extractedData.test_results ?? []
 
+                // Detect document type from API response
+                const docType = labReport.document_type || extractedData.documentType || 'lab_report'
+
                 const transformedReportData: ReportData = {
                     patientInfo: {
                         name: patientInfo.name || 'N/A',
@@ -117,7 +143,12 @@ export default function ReportDetailsPage() {
                         analysisDate: labInfo.analysisDate || labInfo.analysis_date || 'N/A',
                         validatedBy: labInfo.validatedBy || labInfo.validated_by || 'N/A'
                     },
-                    testResults: Array.isArray(testResults) ? testResults : []
+                    testResults: Array.isArray(testResults) ? testResults : [],
+                    // Consultation-specific data
+                    consultationInfo: extractedData.consultationInfo ?? undefined,
+                    clinicalRecords: extractedData.clinicalRecords ?? undefined,
+                    treatmentPlan: extractedData.treatmentPlan ?? undefined,
+                    vitalSigns: extractedData.vitalSigns ?? undefined,
                 }
 
                 const transformedMetadata: ReportMetadata = {
@@ -129,7 +160,8 @@ export default function ReportDetailsPage() {
                     notes: labReport.notes,
                     batchName: labReport.batch?.name || 'Unknown Batch',
                     uploaderName: labReport.uploader?.name || 'Unknown',
-                    batchId: labReport.batch?.id
+                    batchId: labReport.batch?.id,
+                    documentType: docType,
                 }
 
                 setReportData(transformedReportData)
@@ -200,24 +232,23 @@ export default function ReportDetailsPage() {
         document.body.removeChild(link)
     }
 
-    const handleExportCsv = async () => {
+    const handleExportXlsx = async () => {
         try {
-            setIsExportingCsv(true)
-            // Use fetch for blob response
+            setIsExporting(true)
             const token = localStorage.getItem('auth_token')
-            const fetchResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/lab-reports/export/verified-csv?report_id=${reportId}`, {
+            const fetchResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/lab-reports/export/xlsx?report_id=${reportId}`, {
                 method: 'GET',
                 headers: {
-                    'Accept': 'text/csv',
+                    'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     'Authorization': `Bearer ${token}`
                 }
             })
             if (!fetchResponse.ok) {
-                throw new Error('Failed to export CSV')
+                throw new Error('Failed to export report')
             }
             const blob = await fetchResponse.blob()
             if (blob.size === 0) {
-                throw new Error('No verified data found for this report')
+                throw new Error('No data found for this report')
             }
             const url = window.URL.createObjectURL(blob)
             const link = document.createElement('a')
@@ -225,22 +256,22 @@ export default function ReportDetailsPage() {
             const patientName = reportData?.patientInfo.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'unknown'
             const labId = reportData?.labInfo.labId || reportId
             const date = new Date().toISOString().split('T')[0]
-            link.download = `verified_report_${labId}_${patientName}_${date}.csv`
+            link.download = `clinex_report_${labId}_${patientName}_${date}.xlsx`
             document.body.appendChild(link)
             link.click()
             document.body.removeChild(link)
             window.URL.revokeObjectURL(url)
         } catch (error: unknown) {
-            console.error('❌ CSV export failed:', error)
-            let errorMessage = 'Failed to export CSV. Please try again.'
-            if (isApiError(error) && error.message?.includes('Failed to export CSV')) {
-                errorMessage = 'No verified data found for this report.'
+            console.error('❌ Export failed:', error)
+            let errorMessage = 'Failed to export report. Please try again.'
+            if (isApiError(error) && error.message?.includes('Failed to export')) {
+                errorMessage = 'No data found for this report.'
             } else if (isApiError(error) && error.message) {
                 errorMessage = error.message
             }
             toast.error(errorMessage)
         } finally {
-            setIsExportingCsv(false)
+            setIsExporting(false)
         }
     }
 
@@ -379,11 +410,11 @@ export default function ReportDetailsPage() {
                         {reportMetadata.status === 'verified' && (
                             <>
                                 <button
-                                    onClick={handleExportCsv}
-                                    disabled={isExportingCsv}
+                                    onClick={handleExportXlsx}
+                                    disabled={isExporting}
                                     className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {isExportingCsv ? (
+                                    {isExporting ? (
                                         <>
                                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                                             Exporting...
@@ -391,7 +422,7 @@ export default function ReportDetailsPage() {
                                     ) : (
                                         <>
                                             <FileDown className="h-4 w-4 mr-2" />
-                                            Export CSV
+                                            Export Excel
                                         </>
                                     )}
                                 </button>
@@ -574,7 +605,7 @@ export default function ReportDetailsPage() {
                             </div>
                         )}
 
-                        {/* Patient & Lab Information */}
+                        {/* Patient Information — shared by all document types */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div className="bg-white shadow rounded-lg">
                                 <div className="px-6 py-4 border-b border-gray-200">
@@ -617,59 +648,196 @@ export default function ReportDetailsPage() {
                                 </div>
                             </div>
 
-                            <div className="bg-white shadow rounded-lg">
-                                <div className="px-6 py-4 border-b border-gray-200">
-                                    <h3 className="text-lg font-medium text-gray-900 flex items-center">
-                                        <FileText className="h-5 w-5 mr-2 text-green-600" />
-                                        Laboratory Information
-                                        {(reportMetadata.status === 'processing' || reportMetadata.status === 'processed') && (
-                                            <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                Needs Review
-                                            </span>
-                                        )}
-                                    </h3>
-                                </div>
-                                <div className="px-6 py-4 space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-500">Lab ID</label>
-                                            <p className="mt-1 text-sm text-gray-900">{reportData.labInfo.labId}</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-500">Requested By</label>
-                                            <p className="mt-1 text-sm text-gray-900">{reportData.labInfo.requestedBy}</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-500">Requested Date</label>
-                                            <p className="mt-1 text-sm text-gray-900 flex items-center">
-                                                <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                                                {reportData.labInfo.requestedDate}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-500">Collected Date</label>
-                                            <p className="mt-1 text-sm text-gray-900 flex items-center">
-                                                <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                                                {reportData.labInfo.collectedDate}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-500">Analysis Date</label>
-                                            <p className="mt-1 text-sm text-gray-900 flex items-center">
-                                                <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                                                {reportData.labInfo.analysisDate}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-500">Validated By</label>
-                                            <p className="mt-1 text-sm text-gray-900">{reportData.labInfo.validatedBy}</p>
+                            {/* Second card: Lab Info OR Consultation Details */}
+                            {reportMetadata.documentType === 'consultation' ? (
+                                <div className="bg-white shadow rounded-lg">
+                                    <div className="px-6 py-4 border-b border-gray-200">
+                                        <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                                            <Stethoscope className="h-5 w-5 mr-2 text-emerald-600" />
+                                            Consultation Details
+                                        </h3>
+                                    </div>
+                                    <div className="px-6 py-4 space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="col-span-2">
+                                                <label className="block text-sm font-medium text-gray-500">Physician</label>
+                                                <p className="mt-1 text-sm text-gray-900">{reportData.consultationInfo?.physician || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-500">Evaluation Date</label>
+                                                <p className="mt-1 text-sm text-gray-900 flex items-center">
+                                                    <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                                                    {reportData.consultationInfo?.evaluateAt || 'N/A'}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-500">Payment Type</label>
+                                                <p className="mt-1 text-sm text-gray-900">{reportData.consultationInfo?.paymentType || 'N/A'}</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="bg-white shadow rounded-lg">
+                                    <div className="px-6 py-4 border-b border-gray-200">
+                                        <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                                            <FileText className="h-5 w-5 mr-2 text-green-600" />
+                                            Laboratory Information
+                                            {(reportMetadata.status === 'processing' || reportMetadata.status === 'processed') && (
+                                                <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                    Needs Review
+                                                </span>
+                                            )}
+                                        </h3>
+                                    </div>
+                                    <div className="px-6 py-4 space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-500">Lab ID</label>
+                                                <p className="mt-1 text-sm text-gray-900">{reportData.labInfo.labId}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-500">Requested By</label>
+                                                <p className="mt-1 text-sm text-gray-900">{reportData.labInfo.requestedBy}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-500">Requested Date</label>
+                                                <p className="mt-1 text-sm text-gray-900 flex items-center">
+                                                    <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                                                    {reportData.labInfo.requestedDate}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-500">Collected Date</label>
+                                                <p className="mt-1 text-sm text-gray-900 flex items-center">
+                                                    <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                                                    {reportData.labInfo.collectedDate}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-500">Analysis Date</label>
+                                                <p className="mt-1 text-sm text-gray-900 flex items-center">
+                                                    <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                                                    {reportData.labInfo.analysisDate}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-500">Validated By</label>
+                                                <p className="mt-1 text-sm text-gray-900">{reportData.labInfo.validatedBy}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
-                        {/* Test Results by Category */}
+                        {/* Consultation-specific sections */}
+                        {reportMetadata.documentType === 'consultation' && (
+                            <div className="space-y-6">
+                                {/* Clinical Records */}
+                                {reportData.clinicalRecords && (
+                                    <div className="bg-white shadow rounded-lg">
+                                        <div className="px-6 py-4 border-b border-gray-200">
+                                            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                                                <ClipboardList className="h-5 w-5 mr-2 text-purple-600" />
+                                                Clinical Records
+                                            </h3>
+                                        </div>
+                                        <div className="px-6 py-4 space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-500">Chief Complaint</label>
+                                                <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-md">
+                                                    {reportData.clinicalRecords.chiefComplaint || 'Not recorded'}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-500">Evaluation Summary</label>
+                                                <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-md">
+                                                    {reportData.clinicalRecords.evaluationSummary || 'Not recorded'}
+                                                </p>
+                                            </div>
+                                            {reportData.clinicalRecords.currentMedications && (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-500">Current Medications</label>
+                                                    <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-md">
+                                                        {reportData.clinicalRecords.currentMedications}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Treatment Plan */}
+                                {reportData.treatmentPlan && reportData.treatmentPlan.length > 0 && (
+                                    <div className="bg-white shadow rounded-lg">
+                                        <div className="px-6 py-4 border-b border-gray-200">
+                                            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                                                <Activity className="h-5 w-5 mr-2 text-amber-600" />
+                                                Treatment Plan
+                                                <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                                    {reportData.treatmentPlan.length} orders
+                                                </span>
+                                            </h3>
+                                        </div>
+                                        <div className="px-6 py-4">
+                                            <table className="min-w-full divide-y divide-gray-200">
+                                                <thead className="bg-gray-50">
+                                                    <tr>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Type</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PAR Code</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-white divide-y divide-gray-200">
+                                                    {reportData.treatmentPlan.map((item, index) => (
+                                                        <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                                            <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.type}</td>
+                                                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-500 font-mono">{item.code}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Vital Signs */}
+                                {reportData.vitalSigns && Object.values(reportData.vitalSigns).some(v => v) && (
+                                    <div className="bg-white shadow rounded-lg">
+                                        <div className="px-6 py-4 border-b border-gray-200">
+                                            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                                                <Heart className="h-5 w-5 mr-2 text-rose-600" />
+                                                Vital Signs
+                                            </h3>
+                                        </div>
+                                        <div className="px-6 py-4">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                {[
+                                                    { label: 'Pulse', value: reportData.vitalSigns.pulse, unit: 'bpm' },
+                                                    { label: 'Blood Pressure', value: reportData.vitalSigns.systolicBp && reportData.vitalSigns.diastolicBp ? `${reportData.vitalSigns.systolicBp}/${reportData.vitalSigns.diastolicBp}` : '', unit: 'mmHg' },
+                                                    { label: 'Temperature', value: reportData.vitalSigns.temperature, unit: '°C' },
+                                                    { label: 'O₂ Saturation', value: reportData.vitalSigns.o2Saturation, unit: '%' },
+                                                    { label: 'Respiratory Rate', value: reportData.vitalSigns.respiratoryRate, unit: '/min' },
+                                                    { label: 'Height', value: reportData.vitalSigns.height, unit: 'cm' },
+                                                    { label: 'Weight', value: reportData.vitalSigns.weight, unit: 'kg' },
+                                                ].filter(item => item.value).map((item, index) => (
+                                                    <div key={index} className="bg-gray-50 p-3 rounded-lg text-center">
+                                                        <p className="text-xs font-medium text-gray-500 uppercase">{item.label}</p>
+                                                        <p className="mt-1 text-lg font-semibold text-gray-900">{item.value} <span className="text-xs text-gray-500">{item.unit}</span></p>
+                                                    </div>
+                                                ))}
+                                                {!Object.values(reportData.vitalSigns).some(v => v) && (
+                                                    <p className="col-span-full text-sm text-gray-500 text-center">No vital signs recorded</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Lab Report: Test Results (only for non-consultation documents) */}
+                        {reportMetadata.documentType !== 'consultation' && (
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-xl font-bold text-gray-900">Test Results</h3>
@@ -727,6 +895,7 @@ export default function ReportDetailsPage() {
                                 </div>
                             )}
                         </div>
+                        )}
                     </div>
                 </div>
             </div>

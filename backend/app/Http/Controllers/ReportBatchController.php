@@ -6,6 +6,7 @@ use App\Models\ReportBatch;
 use App\Models\LabReport;
 use App\Jobs\ProcessLabReportBatch;
 use App\Jobs\ProcessSingleLabReport;
+use App\Services\ExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -854,12 +855,11 @@ class ReportBatchController extends Controller
     }
 
     /**
-     * Export verified reports from a specific batch as CSV
+     * Export verified reports from a specific batch as XLSX.
      */
-    public function exportBatchVerifiedCsv(Request $request, ReportBatch $reportBatch)
+    public function exportBatchXlsx(Request $request, ReportBatch $reportBatch)
     {
         $verifiedReports = $reportBatch->labReports()
-            ->with(['patient', 'extractedData', 'extractedLabInfo', 'verifier'])
             ->where('status', 'verified')
             ->whereNotNull('verified_at')
             ->orderBy('verified_at', 'desc')
@@ -872,108 +872,9 @@ class ReportBatchController extends Controller
             ], 404);
         }
 
-        // Generate CSV content (reuse the same method from LabReportController)
-        $csvContent = $this->generateVerifiedReportsCsv($verifiedReports, $reportBatch);
+        $exportService = app(ExportService::class);
 
-        $filename = 'batch_' . $reportBatch->id . '_verified_reports_' . now()->format('Y-m-d_H-i-s') . '.csv';
-
-        return response($csvContent)
-            ->header('Content-Type', 'text/csv')
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"')
-            ->header('Content-Length', strlen($csvContent));
-    }
-
-    /**
-     * Generate CSV content for batch verified reports
-     */
-    private function generateVerifiedReportsCsv($reports, $batch = null)
-    {
-        $output = fopen('php://temp', 'r+');
-
-        // CSV Headers
-        $headers = [
-            'Report ID',
-            'Original Filename',
-            'Batch Name',
-            'Patient ID',
-            'Patient Name',
-            'Age',
-            'Gender',
-            'Phone',
-            'Lab ID',
-            'Requested By',
-            'Requested Date',
-            'Collected Date',
-            'Analysis Date',
-            'Validated By',
-            'Test Name',
-            'Result',
-            'Unit',
-            'Reference Range',
-            'Flag',
-            'Category',
-            'Verified By',
-            'Verified At',
-            'Notes'
-        ];
-
-        fputcsv($output, $headers);
-
-        foreach ($reports as $report) {
-            $batchName = $batch ? $batch->name : ($report->batch->name ?? '');
-
-            $baseData = [
-                'report_id'      => $report->id,
-                'filename'       => $report->original_filename,
-                'batch_name'     => $batchName,
-                'patient_id'     => $report->patient->patient_id ?? '',
-                'patient_name'   => $report->patient->name ?? '',
-                'age'            => $report->patient->age ?? '',
-                'gender'         => $report->patient->gender ?? '',
-                'phone'          => $report->patient->phone ?? '',
-                'lab_id'         => $report->extractedLabInfo->lab_id ?? '',
-                'requested_by'   => $report->extractedLabInfo->requested_by ?? '',
-                'requested_date' => $report->extractedLabInfo->requested_date ?? '',
-                'collected_date' => $report->extractedLabInfo->collected_date ?? '',
-                'analysis_date'  => $report->extractedLabInfo->analysis_date ?? '',
-                'validated_by'   => $report->extractedLabInfo->validated_by ?? '',
-                'verified_by'    => $report->verifier->name ?? '',
-                'verified_at'    => $report->verified_at ? $report->verified_at->format('Y-m-d H:i:s') : '',
-                'notes'          => $report->notes ?? '',
-            ];
-
-            // If report has stored test results, create a row per test
-            if ($report->extractedData->isNotEmpty()) {
-                foreach ($report->extractedData as $testResult) {
-                    $row = array_merge($baseData, [
-                        'test_name'       => $testResult->test_name,
-                        'result'          => $testResult->result,
-                        'unit'            => $testResult->unit ?? '',
-                        'reference_range' => $testResult->reference ?? '',
-                        'flag'            => $testResult->flag ?? '',
-                        'category'        => $testResult->category ?? '',
-                    ]);
-                    fputcsv($output, array_values($row));
-                }
-            } else {
-                // No test results — one row with empty test fields
-                $row = array_merge($baseData, [
-                    'test_name'       => '',
-                    'result'          => '',
-                    'unit'            => '',
-                    'reference_range' => '',
-                    'flag'            => '',
-                    'category'        => '',
-                ]);
-                fputcsv($output, array_values($row));
-            }
-        }
-
-        rewind($output);
-        $csvContent = stream_get_contents($output);
-        fclose($output);
-
-        return $csvContent;
+        return $exportService->exportBulkReports($verifiedReports);
     }
 
     /**

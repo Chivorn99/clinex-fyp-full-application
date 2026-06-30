@@ -1,633 +1,353 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { TrendingUp, Users, FileText, Activity, PieChart, RefreshCw, CheckCircle, Clock, AlertTriangle, Target, Zap, Award } from 'lucide-react'
+import {
+    TrendingUp, FileText, Clock, AlertTriangle,
+    RefreshCw, Activity, Users, Beaker, ShieldCheck,
+    BarChart3
+} from 'lucide-react'
 import { apiClient } from '@/lib/api'
 
-interface ApiListResponse<T> {
-    data?: T[]
-}
+// Chart Components
+import ReportVolumeChart from '@/components/analytics/ReportVolumeChart'
+import CategoryDonutChart from '@/components/analytics/CategoryDonutChart'
+import AbnormalTestsChart from '@/components/analytics/AbnormalTestsChart'
+import DemographicsPanel from '@/components/analytics/DemographicsPanel'
+import ConfidenceRadialChart from '@/components/analytics/ConfidenceRadialChart'
+import TechnicianLeaderboard from '@/components/analytics/TechnicianLeaderboard'
 
-interface PatientRecord {
-    created_at?: string
-}
+// ── Types ────────────────────────────────────────────────────
 
-interface UserRef {
-    id: number
-    name: string
-}
-
-interface ExtractedTest {
-    category?: string
-    test_name?: string
-}
-
-interface ReportRecord {
-    status?: string
-    created_at?: string
-    extracted_data?: ExtractedTest[] | null
-    uploader?: UserRef | null
-    verifier?: UserRef | null
-}
-
-type TrendMetric = 'reports' | 'patients' | 'verified'
-
-// Interfaces
-interface AnalyticsData {
-    overview: {
-        totalPatients: number
-        totalReports: number
-        verifiedReports: number
-        pendingReports: number
-        failedReports: number
+interface AnalyticsDashboard {
+    stats: {
+        total_reports: number
+        pending_verification: number
+        avg_processing_time: number
+        abnormal_results: number
     }
-    trends: {
-        daily: Array<{
-            date: string
-            reports: number
-            patients: number
-            verified: number
-        }>
-        monthly: Array<{
-            month: string
-            reports: number
-            patients: number
-            verified: number
-        }>
+    report_volume: Array<{ date: string; count: number }>
+    category_distribution: Array<{ name: string; value: number }>
+    top_abnormal_tests: Array<{ test_name: string; high: number; low: number }>
+    patient_demographics: {
+        gender: Record<string, number>
+        age_groups: Array<{ range: string; count: number }>
     }
-    testCategories: Array<{
-        category: string
-        count: number
-        percentage: number
+    confidence_by_category: Array<{ category: string; avg_confidence: number }>
+    technician_activity: Array<{
+        id: number
+        name: string
+        uploads: number
+        verifications: number
     }>
-    topTests: Array<{
-        testName: string
-        count: number
-        category: string
-    }>
-    userActivity: Array<{
-        userId: number
-        userName: string
-        uploadsCount: number
-        verificationsCount: number
-    }>
-    processingStats: {
-        successRate: number
-    }
 }
+
+type TimeRange = '7' | '14' | '30' | '0'
+
+const TIME_RANGE_LABELS: Record<TimeRange, string> = {
+    '7': '7d',
+    '14': '14d',
+    '30': '30d',
+    '0': 'All Time',
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+
+function formatNumber(num: number): string {
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+    return num.toString()
+}
+
+function formatSeconds(seconds: number): string {
+    if (seconds < 60) return `${seconds.toFixed(1)}s`
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.round(seconds % 60)
+    return `${mins}m ${secs}s`
+}
+
+// ── Stat Card ────────────────────────────────────────────────
+
+interface StatCardProps {
+    title: string
+    value: string
+    subtitle: string
+    icon: React.ReactNode
+    accentColor: string // e.g. "blue", "purple", "emerald", "rose"
+}
+
+function StatCard({ title, value, subtitle, icon, accentColor }: StatCardProps) {
+    const colorMap: Record<string, { glow: string; iconBg: string; iconBorder: string; iconText: string; badge: string; badgeText: string }> = {
+        blue:    { glow: 'bg-blue-500/10',    iconBg: 'bg-blue-500/10',    iconBorder: 'border-blue-500/20',    iconText: 'text-blue-400',    badge: 'bg-blue-500/10',    badgeText: 'text-blue-400' },
+        purple:  { glow: 'bg-purple-500/10',  iconBg: 'bg-purple-500/10',  iconBorder: 'border-purple-500/20',  iconText: 'text-purple-400',  badge: 'bg-purple-500/10',  badgeText: 'text-purple-400' },
+        amber:   { glow: 'bg-amber-500/10',   iconBg: 'bg-amber-500/10',   iconBorder: 'border-amber-500/20',   iconText: 'text-amber-400',   badge: 'bg-amber-500/10',   badgeText: 'text-amber-400' },
+        rose:    { glow: 'bg-rose-500/10',    iconBg: 'bg-rose-500/10',    iconBorder: 'border-rose-500/20',    iconText: 'text-rose-400',    badge: 'bg-rose-500/10',    badgeText: 'text-rose-400' },
+        emerald: { glow: 'bg-emerald-500/10', iconBg: 'bg-emerald-500/10', iconBorder: 'border-emerald-500/20', iconText: 'text-emerald-400', badge: 'bg-emerald-500/10', badgeText: 'text-emerald-400' },
+    }
+    const c = colorMap[accentColor] || colorMap.blue
+
+    return (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all duration-300">
+            <div className={`absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 ${c.glow} rounded-full blur-xl group-hover:opacity-150 transition-all duration-500`} />
+            <div className="flex items-center justify-between relative z-10">
+                <div>
+                    <p className="text-slate-400 text-xs font-semibold tracking-wider uppercase">{title}</p>
+                    <p className="text-3xl font-extrabold text-white mt-2 tracking-tight">{value}</p>
+                    <div className={`flex items-center mt-3 text-xs font-medium ${c.badgeText} ${c.badge} px-2.5 py-1 rounded-full w-fit`}>
+                        <span>{subtitle}</span>
+                    </div>
+                </div>
+                <div className={`p-3.5 ${c.iconBg} border ${c.iconBorder} rounded-xl ${c.iconText}`}>
+                    {icon}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ── Section Card Wrapper ─────────────────────────────────────
+
+function SectionCard({ title, subtitle, children, className = '' }: {
+    title: string
+    subtitle: string
+    children: React.ReactNode
+    className?: string
+}) {
+    return (
+        <div className={`bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col ${className}`}>
+            <div className="p-5 border-b border-slate-800/80 bg-slate-950/40">
+                <h3 className="text-base font-bold text-white">{title}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>
+            </div>
+            <div className="p-5 flex-1">
+                {children}
+            </div>
+        </div>
+    )
+}
+
+// ── Loading Skeleton ─────────────────────────────────────────
+
+function LoadingSkeleton() {
+    return (
+        <div className="space-y-6">
+            {/* Stat cards skeleton */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 animate-pulse">
+                        <div className="h-3 bg-slate-800 rounded w-24 mb-4" />
+                        <div className="h-8 bg-slate-800 rounded w-20 mb-3" />
+                        <div className="h-5 bg-slate-800 rounded w-32" />
+                    </div>
+                ))}
+            </div>
+            {/* Chart sections skeleton */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 animate-pulse">
+                        <div className="h-4 bg-slate-800 rounded w-40 mb-2" />
+                        <div className="h-3 bg-slate-800 rounded w-56 mb-6" />
+                        <div className="h-48 bg-slate-800/50 rounded-lg" />
+                    </div>
+                ))}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 animate-pulse">
+                        <div className="h-4 bg-slate-800 rounded w-40 mb-2" />
+                        <div className="h-3 bg-slate-800 rounded w-56 mb-6" />
+                        <div className="h-48 bg-slate-800/50 rounded-lg" />
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+// ── Main Page ────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
-    const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)
+    const [data, setData] = useState<AnalyticsDashboard | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
-    const [timeRange, setTimeRange] = useState('30') // days
-    const [selectedMetric, setSelectedMetric] = useState<TrendMetric>('reports')
+    const [timeRange, setTimeRange] = useState<TimeRange>('30')
 
-    const generateDailyTrends = useCallback((reports: ReportRecord[], patients: PatientRecord[], days: number) => {
-        const trends: AnalyticsData['trends']['daily'] = []
-        const now = new Date()
-
-        for (let i = days - 1; i >= 0; i--) {
-            const date = new Date(now)
-            date.setDate(date.getDate() - i)
-            const dateStr = date.toISOString().split('T')[0]
-
-            const dayReports = reports.filter(r => r.created_at?.startsWith(dateStr))
-            const dayPatients = patients.filter(p => p.created_at?.startsWith(dateStr))
-            const dayVerified = dayReports.filter(r => r.status === 'verified')
-
-            trends.push({
-                date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                reports: dayReports.length,
-                patients: dayPatients.length,
-                verified: dayVerified.length
-            })
-        }
-
-        return trends
-    }, [])
-
-    const generateMonthlyTrends = useCallback((reports: ReportRecord[], patients: PatientRecord[]) => {
-        const trends: AnalyticsData['trends']['monthly'] = []
-        const now = new Date()
-
-        for (let i = 5; i >= 0; i--) {
-            const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-            const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-
-            const monthReports = reports.filter(r => r.created_at?.startsWith(monthStr))
-            const monthPatients = patients.filter(p => p.created_at?.startsWith(monthStr))
-            const monthVerified = monthReports.filter(r => r.status === 'verified')
-
-            trends.push({
-                month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-                reports: monthReports.length,
-                patients: monthPatients.length,
-                verified: monthVerified.length
-            })
-        }
-
-        return trends
-    }, [])
-
-    const processTestCategories = useCallback((reports: ReportRecord[]) => {
-        const categories: Record<string, number> = {}
-        let totalTests = 0
-
-        reports.forEach(report => {
-            if (Array.isArray(report.extracted_data)) {
-                report.extracted_data.forEach((test: ExtractedTest) => {
-                    const category = test.category || 'UNCATEGORIZED'
-                    categories[category] = (categories[category] || 0) + 1
-                    totalTests++
-                })
-            }
-        })
-
-        return Object.entries(categories).map(([category, count]) => ({
-            category,
-            count,
-            percentage: totalTests > 0 ? Math.round((count / totalTests) * 100) : 0
-        })).sort((a, b) => b.count - a.count)
-    }, [])
-
-    const getTopTests = useCallback((reports: ReportRecord[]) => {
-        const tests: Record<string, { count: number; category: string }> = {}
-
-        reports.forEach(report => {
-            if (Array.isArray(report.extracted_data)) {
-                report.extracted_data.forEach((test: ExtractedTest) => {
-                    const testName = test.test_name || 'Unknown Test'
-                    const category = test.category || 'UNCATEGORIZED'
-
-                    if (!tests[testName]) {
-                        tests[testName] = { count: 0, category }
-                    }
-                    tests[testName].count++
-                })
-            }
-        })
-
-        return Object.entries(tests)
-            .map(([testName, data]) => ({
-                testName,
-                count: data.count,
-                category: data.category
-            }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 10)
-    }, [])
-
-    const processUserActivity = useCallback((reports: ReportRecord[]) => {
-        const users: Record<number, { name: string; uploads: number; verifications: number }> = {}
-
-        reports.forEach(report => {
-            if (report.uploader) {
-                const userId = report.uploader.id
-                if (!users[userId]) {
-                    users[userId] = { name: report.uploader.name, uploads: 0, verifications: 0 }
-                }
-                users[userId].uploads++
-            }
-
-            if (report.verifier) {
-                const userId = report.verifier.id
-                if (!users[userId]) {
-                    users[userId] = { name: report.verifier.name, uploads: 0, verifications: 0 }
-                }
-                users[userId].verifications++
-            }
-        })
-
-        return Object.entries(users).map(([userId, data]) => ({
-            userId: parseInt(userId),
-            userName: data.name,
-            uploadsCount: data.uploads,
-            verificationsCount: data.verifications
-        })).sort((a, b) => (b.uploadsCount + b.verificationsCount) - (a.uploadsCount + a.verificationsCount))
-    }, [])
-
-    const getMaxValue = useCallback((data: AnalyticsData['trends']['daily'], key: TrendMetric) => {
-        return Math.max(...data.map(item => item[key]), 0)
-    }, [])
-
-    const fetchAnalyticsData = useCallback(async () => {
+    const fetchData = useCallback(async () => {
         try {
             setLoading(true)
             setError('')
-            const [patientsResponse, reportsResponse] = await Promise.all([
-                apiClient.get('/patients?per_page=1000'),
-                apiClient.get('/lab-reports?per_page=1000')
-            ])
-
-
-            const patients = (patientsResponse.data as ApiListResponse<PatientRecord>)?.data || []
-            const reports = (reportsResponse.data as ApiListResponse<ReportRecord>)?.data || []
-
-            const totalPatients = patients.length
-            const totalReports = reports.length
-            const verifiedReports = reports.filter((r: ReportRecord) => r.status === 'verified').length
-            const pendingReports = reports.filter((r: ReportRecord) => r.status === 'processed').length
-            const failedReports = reports.filter((r: ReportRecord) => r.status === 'failed').length
-
-
-            const daily = generateDailyTrends(reports, patients, parseInt(timeRange))
-            const monthly = generateMonthlyTrends(reports, patients)
-            const testCategories = processTestCategories(reports)
-            const topTests = getTopTests(reports)
-            const userActivity = processUserActivity(reports)
-
-            const processingStats = {
-                successRate: totalReports > 0 ? ((verifiedReports + pendingReports) / totalReports) * 100 : 0
-            }
-
-            setAnalyticsData({
-                overview: {
-                    totalPatients,
-                    totalReports,
-                    verifiedReports,
-                    pendingReports,
-                    failedReports,
-                },
-                trends: {
-                    daily,
-                    monthly
-                },
-                testCategories,
-                topTests,
-                userActivity,
-                processingStats
-            })
+            const result = await apiClient.get(`/analytics/dashboard?days=${timeRange}`)
+            setData(result as AnalyticsDashboard)
         } catch (err: unknown) {
-            console.error('Failed to fetch analytics data:', err)
-            setError('Failed to load analytics data')
+            console.error('Failed to fetch analytics:', err)
+            setError(err instanceof Error ? err.message : 'Failed to load analytics data')
         } finally {
             setLoading(false)
         }
-    }, [generateDailyTrends, generateMonthlyTrends, getTopTests, processTestCategories, processUserActivity, timeRange])
+    }, [timeRange])
 
     useEffect(() => {
-        fetchAnalyticsData()
-    }, [fetchAnalyticsData])
-
-    const formatNumber = (num: number) => {
-        if (num >= 1000) {
-            return (num / 1000).toFixed(1) + 'K'
-        }
-        return num.toString()
-    }
-
-    const getCategoryColor = (index: number) => {
-        const colors = [
-            'bg-blue-500',
-            'bg-green-500',
-            'bg-purple-500',
-            'bg-yellow-500',
-            'bg-red-500',
-            'bg-indigo-500',
-            'bg-pink-500',
-            'bg-teal-500'
-        ]
-        return colors[index % colors.length]
-    }
+        fetchData()
+    }, [fetchData])
 
     return (
         <DashboardLayout>
+            {/* Dark background wrapper — bleeds edge-to-edge inside DashboardLayout */}
+            <div className="bg-slate-950 -mx-4 sm:-mx-6 lg:-mx-8 -my-6 px-4 sm:px-6 lg:px-8 py-6 min-h-[calc(100vh-4rem)]">
             <div className="space-y-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
+                {/* ── Header ─────────────────────────────── */}
+                <div className="flex items-center justify-between flex-wrap gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
-                        <p className="mt-1 text-gray-600">
-                            Comprehensive insights into your lab report processing system
+                        <h1 className="text-3xl font-bold text-white">Analytics Dashboard</h1>
+                        <p className="mt-1 text-slate-400">
+                            Lab performance insights & clinical data overview
                         </p>
                     </div>
-                    <div className="flex space-x-3">
-                        <select
-                            value={timeRange}
-                            onChange={(e) => setTimeRange(e.target.value)}
-                            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="7">Last 7 days</option>
-                            <option value="30">Last 30 days</option>
-                            <option value="90">Last 90 days</option>
-                        </select>
+                    <div className="flex items-center gap-3">
+                        {/* Time Range Toggle */}
+                        <div className="flex bg-slate-800 p-0.5 rounded-lg">
+                            {(Object.keys(TIME_RANGE_LABELS) as TimeRange[]).map((range) => (
+                                <button
+                                    key={range}
+                                    onClick={() => setTimeRange(range)}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                                        timeRange === range
+                                            ? 'bg-indigo-600 text-white shadow-sm'
+                                            : 'text-slate-400 hover:text-white'
+                                    }`}
+                                >
+                                    {TIME_RANGE_LABELS[range]}
+                                </button>
+                            ))}
+                        </div>
+                        {/* Refresh */}
                         <button
-                            onClick={fetchAnalyticsData}
+                            onClick={fetchData}
                             disabled={loading}
-                            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                            className="inline-flex items-center px-3.5 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-all disabled:opacity-50"
                         >
-                            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
                             Refresh
                         </button>
                     </div>
                 </div>
 
+                {/* ── Content ────────────────────────────── */}
                 {loading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {Array.from({ length: 8 }).map((_, i) => (
-                            <div key={i} className="bg-white rounded-xl shadow-sm p-6 animate-pulse">
-                                <div className="h-4 bg-gray-200 rounded mb-4"></div>
-                                <div className="h-8 bg-gray-200 rounded mb-2"></div>
-                                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                            </div>
-                        ))}
-                    </div>
+                    <LoadingSkeleton />
                 ) : error ? (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+                    <div className="bg-red-950/50 border border-red-900/50 rounded-2xl p-8 text-center">
                         <AlertTriangle className="h-12 w-12 text-red-400 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Analytics</h3>
-                        <p className="text-red-600 mb-4">{error}</p>
+                        <h3 className="text-lg font-semibold text-red-300 mb-2">Error Loading Analytics</h3>
+                        <p className="text-red-400/80 text-sm mb-4 max-w-md mx-auto">{error}</p>
                         <button
-                            onClick={fetchAnalyticsData}
-                            className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                            onClick={fetchData}
+                            className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-500 transition-colors text-sm font-medium"
                         >
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Try Again
                         </button>
                     </div>
-                ) : analyticsData ? (
+                ) : data ? (
                     <>
-                        {/* Overview Stats */}
+                        {/* ── Row 1: Stat Cards ──────────── */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <div className="bg-linear-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-blue-100 text-sm font-medium">Total Patients</p>
-                                        <p className="text-3xl font-bold">{formatNumber(analyticsData.overview.totalPatients)}</p>
-                                        <p className="text-blue-100 text-sm mt-1">
-                                            <TrendingUp className="h-4 w-4 inline mr-1" />
-                                            Active in system
-                                        </p>
-                                    </div>
-                                    <Users className="h-12 w-12 text-blue-200" />
-                                </div>
-                            </div>
-
-                            <div className="bg-linear-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-green-100 text-sm font-medium">Total Reports</p>
-                                        <p className="text-3xl font-bold">{formatNumber(analyticsData.overview.totalReports)}</p>
-                                        <p className="text-green-100 text-sm mt-1">
-                                            <FileText className="h-4 w-4 inline mr-1" />
-                                            Processed overall
-                                        </p>
-                                    </div>
-                                    <FileText className="h-12 w-12 text-green-200" />
-                                </div>
-                            </div>
-
-                            <div className="bg-linear-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-purple-100 text-sm font-medium">Verified Reports</p>
-                                        <p className="text-3xl font-bold">{formatNumber(analyticsData.overview.verifiedReports)}</p>
-                                        <p className="text-purple-100 text-sm mt-1">
-                                            <CheckCircle className="h-4 w-4 inline mr-1" />
-                                            {analyticsData.overview.totalReports > 0 
-                                                ? Math.round((analyticsData.overview.verifiedReports / analyticsData.overview.totalReports) * 100) + '%'
-                                                : '0%'
-                                            } completion rate
-                                        </p>
-                                    </div>
-                                    <Award className="h-12 w-12 text-purple-200" />
-                                </div>
-                            </div>
-
-                            <div className="bg-linear-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-orange-100 text-sm font-medium">Success Rate</p>
-                                        <p className="text-3xl font-bold">{analyticsData.processingStats.successRate.toFixed(1)}%</p>
-                                        <p className="text-orange-100 text-sm mt-1">
-                                            <Zap className="h-4 w-4 inline mr-1" />
-                                            Processing accuracy
-                                        </p>
-                                    </div>
-                                    <Activity className="h-12 w-12 text-orange-200" />
-                                </div>
-                            </div>
+                            <StatCard
+                                title="Reports Processed"
+                                value={formatNumber(data.stats.total_reports)}
+                                subtitle="Total in selected range"
+                                icon={<FileText className="h-6 w-6" />}
+                                accentColor="blue"
+                            />
+                            <StatCard
+                                title="Pending Verification"
+                                value={formatNumber(data.stats.pending_verification)}
+                                subtitle="Awaiting technician review"
+                                icon={<Clock className="h-6 w-6" />}
+                                accentColor="amber"
+                            />
+                            <StatCard
+                                title="Avg Processing Time"
+                                value={formatSeconds(data.stats.avg_processing_time)}
+                                subtitle="OCR + LLM extraction"
+                                icon={<Activity className="h-6 w-6" />}
+                                accentColor="emerald"
+                            />
+                            <StatCard
+                                title="Abnormal Results"
+                                value={formatNumber(data.stats.abnormal_results)}
+                                subtitle="Flagged High or Low"
+                                icon={<AlertTriangle className="h-6 w-6" />}
+                                accentColor="rose"
+                            />
                         </div>
 
-                        {/* Detailed Metrics */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-yellow-400">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-gray-600 text-sm font-medium">Pending Reports</p>
-                                        <p className="text-2xl font-bold text-yellow-600">{analyticsData.overview.pendingReports}</p>
-                                    </div>
-                                    <Clock className="h-8 w-8 text-yellow-400" />
+                        {/* ── Row 2: Volume & Categories ──── */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            <SectionCard
+                                title="Report Volume"
+                                subtitle="Daily report processing activity"
+                                className="lg:col-span-7"
+                            >
+                                <div className="h-56">
+                                    <ReportVolumeChart data={data.report_volume} />
                                 </div>
-                            </div>
+                            </SectionCard>
 
-                            <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-red-400">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-gray-600 text-sm font-medium">Failed Reports</p>
-                                        <p className="text-2xl font-bold text-red-600">{analyticsData.overview.failedReports}</p>
-                                    </div>
-                                    <AlertTriangle className="h-8 w-8 text-red-400" />
+                            <SectionCard
+                                title="Test Category Distribution"
+                                subtitle="Breakdown across lab disciplines"
+                                className="lg:col-span-5"
+                            >
+                                <div className="h-56">
+                                    <CategoryDonutChart data={data.category_distribution} />
                                 </div>
-                            </div>
-
-                            <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-400">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-gray-600 text-sm font-medium">Verified Rate</p>
-                                        <p className="text-2xl font-bold text-green-600">
-                                            {analyticsData.overview.totalReports > 0 
-                                                ? Math.round((analyticsData.overview.verifiedReports / analyticsData.overview.totalReports) * 100)
-                                                : 0}%
-                                        </p>
-                                    </div>
-                                    <Target className="h-8 w-8 text-green-400" />
-                                </div>
-                            </div>
-
-                            <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-400">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-gray-600 text-sm font-medium">Test Categories</p>
-                                        <p className="text-2xl font-bold text-blue-600">{analyticsData.testCategories.length}</p>
-                                    </div>
-                                    <PieChart className="h-8 w-8 text-blue-400" />
-                                </div>
-                            </div>
+                            </SectionCard>
                         </div>
 
-                        {/* Charts Section */}
+                        {/* ── Row 3: Abnormal Tests & Demographics */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Trends Chart */}
-                            <div className="bg-white rounded-xl shadow-sm">
-                                <div className="p-6 border-b border-gray-200">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="text-lg font-semibold text-gray-900">Report Trends</h3>
-                                        <div className="flex space-x-2">
-                                            {(['reports', 'patients', 'verified'] as TrendMetric[]).map((metric) => (
-                                                <button
-                                                    key={metric}
-                                                    onClick={() => setSelectedMetric(metric)}
-                                                    className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                                        selectedMetric === metric 
-                                                            ? 'bg-blue-100 text-blue-800' 
-                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    {metric.charAt(0).toUpperCase() + metric.slice(1)}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                            <SectionCard
+                                title="Top Abnormal Biomarkers"
+                                subtitle="Most frequently flagged test results (High / Low)"
+                            >
+                                <div className="h-64">
+                                    <AbnormalTestsChart data={data.top_abnormal_tests} />
                                 </div>
-                                <div className="p-6">
-                                    <div className="space-y-4">
-                                        {analyticsData.trends.daily.map((day, index) => {
-                                            const value = day[selectedMetric as keyof typeof day] as number
-                                            const maxValue = getMaxValue(analyticsData.trends.daily, selectedMetric)
-                                            const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0
-                                            
-                                            return (
-                                                <div key={index} className="flex items-center space-x-3">
-                                                    <div className="w-16 text-xs text-gray-600 font-medium">
-                                                        {day.date}
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <div className="bg-gray-200 rounded-full h-2">
-                                                            <div 
-                                                                className="bg-linear-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-                                                                style={{ width: `${percentage}%` }}
-                                                            ></div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="w-8 text-xs text-gray-900 font-semibold text-right">
-                                                        {value}
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
+                            </SectionCard>
 
-                            {/* Test Categories */}
-                            <div className="bg-white rounded-xl shadow-sm">
-                                <div className="p-6 border-b border-gray-200">
-                                    <h3 className="text-lg font-semibold text-gray-900">Test Categories Distribution</h3>
+                            <SectionCard
+                                title="Patient Demographics"
+                                subtitle="Gender split & age distribution"
+                            >
+                                <div className="h-64">
+                                    <DemographicsPanel
+                                        gender={data.patient_demographics.gender}
+                                        ageGroups={data.patient_demographics.age_groups}
+                                    />
                                 </div>
-                                <div className="p-6">
-                                    <div className="space-y-4">
-                                        {analyticsData.testCategories.slice(0, 6).map((category, index) => (
-                                            <div key={category.category} className="flex items-center justify-between">
-                                                <div className="flex items-center space-x-3">
-                                                    <div className={`w-4 h-4 rounded-full ${getCategoryColor(index)}`}></div>
-                                                    <span className="text-sm font-medium text-gray-900">{category.category}</span>
-                                                </div>
-                                                <div className="flex items-center space-x-2">
-                                                    <span className="text-sm text-gray-600">{category.count}</span>
-                                                    <span className="text-xs text-gray-500">({category.percentage}%)</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                            </SectionCard>
                         </div>
 
-                        {/* Additional Insights */}
+                        {/* ── Row 4: Confidence & Leaderboard */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Top Tests */}
-                            <div className="bg-white rounded-xl shadow-sm">
-                                <div className="p-6 border-b border-gray-200">
-                                    <h3 className="text-lg font-semibold text-gray-900">Most Common Tests</h3>
+                            <SectionCard
+                                title="OCR Confidence by Category"
+                                subtitle="Average extraction confidence per test discipline"
+                            >
+                                <div className="h-56">
+                                    <ConfidenceRadialChart data={data.confidence_by_category} />
                                 </div>
-                                <div className="p-6">
-                                    <div className="space-y-3">
-                                        {analyticsData.topTests.slice(0, 8).map((test, index) => (
-                                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                                <div>
-                                                    <p className="text-sm font-medium text-gray-900">{test.testName}</p>
-                                                    <p className="text-xs text-gray-600">{test.category}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-sm font-semibold text-blue-600">{test.count}</p>
-                                                    <p className="text-xs text-gray-500">tests</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                            </SectionCard>
 
-                            {/* User Activity */}
-                            <div className="bg-white rounded-xl shadow-sm">
-                                <div className="p-6 border-b border-gray-200">
-                                    <h3 className="text-lg font-semibold text-gray-900">User Activity</h3>
-                                </div>
-                                <div className="p-6">
-                                    <div className="space-y-3">
-                                        {analyticsData.userActivity.slice(0, 6).map((user) => (
-                                            <div key={user.userId} className="flex items-center justify-between p-3 bg-linear-to-r from-blue-50 to-purple-50 rounded-lg">
-                                                <div className="flex items-center space-x-3">
-                                                    <div className="w-8 h-8 bg-linear-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                                                        {user.userName.charAt(0)}
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm font-medium text-gray-900">{user.userName}</p>
-                                                        <p className="text-xs text-gray-600">
-                                                            {user.uploadsCount} uploads • {user.verificationsCount} verifications
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-sm font-semibold text-purple-600">
-                                                        {user.uploadsCount + user.verificationsCount}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500">total</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Performance Metrics */}
-                        <div className="bg-linear-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-xl shadow-lg p-8 text-white">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                                <div className="text-center">
-                                    <div className="bg-white bg-opacity-20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                                        <Target className="h-8 w-8" />
-                                    </div>
-                                    <p className="text-2xl font-bold">{analyticsData.processingStats.successRate.toFixed(1)}%</p>
-                                    <p className="text-sm opacity-90">Success Rate</p>
-                                </div>
-                                <div className="text-center">
-                                    <div className="bg-white bg-opacity-20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                                        <Zap className="h-8 w-8" />
-                                    </div>
-                                    <p className="text-2xl font-bold">{analyticsData.overview.verifiedReports}</p>
-                                    <p className="text-sm opacity-90">Verified</p>
-                                </div>
-                                <div className="text-center">
-                                    <div className="bg-white bg-opacity-20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                                        <Award className="h-8 w-8" />
-                                    </div>
-                                    <p className="text-2xl font-bold">{analyticsData.overview.pendingReports}</p>
-                                    <p className="text-sm opacity-90">Pending</p>
-                                </div>
-                                <div className="text-center">
-                                    <div className="bg-white bg-opacity-20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                                        <Activity className="h-8 w-8" />
-                                    </div>
-                                    <p className="text-2xl font-bold">{analyticsData.overview.totalReports}</p>
-                                    <p className="text-sm opacity-90">Total Processed</p>
-                                </div>
-                            </div>
+                            <SectionCard
+                                title="Technician Activity"
+                                subtitle="Top contributors by uploads & verifications"
+                            >
+                                <TechnicianLeaderboard data={data.technician_activity} />
+                            </SectionCard>
                         </div>
                     </>
                 ) : null}
+            </div>
             </div>
         </DashboardLayout>
     )
