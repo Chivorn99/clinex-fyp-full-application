@@ -10,6 +10,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\Auth\OtpPasswordController;
+use App\Http\Controllers\AnalyticsController;
 use App\Http\Requests\Auth\LoginRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -49,10 +50,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('users/role/{role}', [UserController::class, 'getByRole']);
     Route::get('users/{id}/profile-picture', [UserController::class, 'getProfilePicture']);
 
-    Route::get('/lab-reports/export/verified-csv', [LabReportController::class, 'exportVerifiedCsv'])->name('lab-reports.export-verified-csv');
-    Route::get('/batches/{reportBatch}/export/verified-csv', [ReportBatchController::class, 'exportBatchVerifiedCsv'])->name('batches.export-verified-csv');
+    Route::get('/lab-reports/export/xlsx', [LabReportController::class, 'exportXlsx'])->name('lab-reports.export-xlsx');
+    Route::get('/lab-reports/export/bulk-xlsx', [LabReportController::class, 'exportBulkXlsx'])->name('lab-reports.export-bulk-xlsx');
+    Route::get('/batches/{reportBatch}/export/xlsx', [ReportBatchController::class, 'exportBatchXlsx'])->name('batches.export-xlsx');
 
     Route::get('/{labReport}/pdf-data', [LabReportController::class, 'getPdfData'])->name('pdf-data');
+
+    // Analytics (available to all authenticated users)
+    Route::get('/analytics/dashboard', [AnalyticsController::class, 'dashboard']);
 });
 
 // Lab Report Batch Processing Routes

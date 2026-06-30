@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { Search, Eye, CheckCircle, Clock, FileText, Users } from 'lucide-react'
+import { Search, Eye, CheckCircle, Clock, FileText, Users, Download } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 
 interface ExtractedData {
@@ -78,6 +78,7 @@ export default function ReportsPage() {
     const [availableBatches, setAvailableBatches] = useState<{ id: string, name: string }[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
+    const [isExporting, setIsExporting] = useState(false)
     const router = useRouter()
 
     // Fetch reports from API
@@ -278,6 +279,43 @@ export default function ReportsPage() {
         router.push(`/main/verification?batchId=${queryBatchId}&reportId=${report.id}`)
     }
 
+    const handleBulkExport = async () => {
+        try {
+            setIsExporting(true)
+            const token = localStorage.getItem('auth_token')
+            const params = new URLSearchParams()
+            if (filterBatch !== 'all') {
+                params.append('batch_id', filterBatch)
+            }
+            const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/lab-reports/export/bulk-xlsx${params.toString() ? '?' + params.toString() : ''}`
+            const fetchResponse = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            if (!fetchResponse.ok) {
+                const errorData = await fetchResponse.json().catch(() => null)
+                throw new Error(errorData?.message || 'Failed to export reports')
+            }
+            const blob = await fetchResponse.blob()
+            const downloadUrl = window.URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = downloadUrl
+            link.download = `clinex_reports_export_${new Date().toISOString().split('T')[0]}.xlsx`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            window.URL.revokeObjectURL(downloadUrl)
+        } catch (err: unknown) {
+            console.error('Export failed:', err)
+            alert(isApiError(err) && err.message ? err.message : 'Failed to export. Make sure there are verified reports.')
+        } finally {
+            setIsExporting(false)
+        }
+    }
+
     if (loading) {
         return (
             <DashboardLayout>
@@ -309,11 +347,32 @@ export default function ReportsPage() {
         <DashboardLayout>
             <div className="space-y-6">
                 {/* Header */}
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Reports Management</h1>
-                    <p className="mt-2 text-gray-600">
-                        View and manage all processed medical reports and batch classifications
-                    </p>
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">Reports Management</h1>
+                        <p className="mt-2 text-gray-600">
+                            View and manage all processed medical reports and batch classifications
+                        </p>
+                    </div>
+                    {stats.verified > 0 && (
+                        <button
+                            onClick={handleBulkExport}
+                            disabled={isExporting}
+                            className="inline-flex items-center px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shadow-sm transition-colors"
+                        >
+                            {isExporting ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                                    Exporting...
+                                </>
+                            ) : (
+                                <>
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Export All Verified
+                                </>
+                            )}
+                        </button>
+                    )}
                 </div>
 
                 {/* Stats Cards */}

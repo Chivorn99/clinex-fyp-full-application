@@ -331,7 +331,7 @@ make docker-ai-restart    # Restart
 
 ## 👤 Author
 
-**Nhoung Chivorn** — Final Year Project, 2026
+**Chivorn & Chhengthai** — Final Year Project, 2026
 
 ---
 

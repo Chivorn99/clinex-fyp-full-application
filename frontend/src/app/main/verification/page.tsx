@@ -16,6 +16,9 @@ import {
   Clock as ClockIcon,
   Plus,
   Trash2,
+  Activity,
+  ClipboardList,
+  Stethoscope,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
 
@@ -45,6 +48,34 @@ interface TestResult {
   unit: string;
   referenceRange: string;
   flag: "high" | "low" | "critical" | "normal" | null;
+}
+
+interface ConsultationInfo {
+  paymentType: string;
+  physician: string;
+  evaluateAt: string;
+}
+
+interface VitalSigns {
+  systolicBp: string;
+  diastolicBp: string;
+  pulse: string;
+  respiratoryRate: string;
+  temperature: string;
+  o2Saturation: string;
+  height: string;
+  weight: string;
+}
+
+interface ClinicalRecords {
+  chiefComplaint: string;
+  currentMedications: string;
+  evaluationSummary: string;
+}
+
+interface TreatmentPlanItem {
+  type: string;
+  code: string;
 }
 
 interface BackendTestResult {
@@ -77,12 +108,18 @@ interface BackendGroupedTestResults {
 
 interface BackendExtractedData {
   rawText?: string;
+  documentType?: 'lab_report' | 'consultation';
   patientInfo?: Partial<PatientInfo>;
   labInfo?: BackendLabInfo;
   // Flat format (legacy regex parser output and normalized batch job output)
   testResults?: BackendTestResult[];
   // Grouped format (Ollama LLM schema output — may appear in old DB records)
   test_results?: BackendGroupedTestResults;
+  // Consultation-specific fields
+  consultationInfo?: ConsultationInfo;
+  vitalSigns?: VitalSigns;
+  clinicalRecords?: ClinicalRecords;
+  treatmentPlan?: TreatmentPlanItem[];
 }
 
 interface BackendLabReport {
@@ -90,6 +127,7 @@ interface BackendLabReport {
   status?: string;
   original_filename?: string;
   raw_ocr_text?: string | null;
+  document_type?: 'lab_report' | 'consultation' | null;
   uploader?: BackendUploader | null;
   batch?: {
     id: number;
@@ -151,9 +189,14 @@ interface ProcessedReport {
   status: "processing" | "completed" | "verified" | "error";
   processingProgress: number;
   pdfUrl: string; // Will be updated dynamically with data URL
+  documentType: 'lab_report' | 'consultation';
   patientInfo: PatientInfo;
   labInfo: LabInfo;
   testResults: TestResult[];
+  consultationInfo?: ConsultationInfo;
+  vitalSigns?: VitalSigns;
+  clinicalRecords?: ClinicalRecords;
+  treatmentPlan?: TreatmentPlanItem[];
   extracted_data?: BackendExtractedData;
   original_filename?: string;
   uploader?: BackendUploader | null;
@@ -264,7 +307,17 @@ export default function VerificationPage() {
       labReport: BackendLabReport,
       extractedData?: BackendExtractedData,
     ): ProcessedReport => {
-      const rawOcrText = labReport.raw_ocr_text || extractedData?.rawText || "";
+      const rawOcrText = labReport.raw_ocr_text || extractedData?.rawText || (extractedData as any)?.raw_text || (extractedData as any)?._raw_text || "";
+
+      // Determine document type from backend field or extracted data
+      const isConsult =
+        labReport.document_type === 'consultation' ||
+        labReport.document_type === 'Patient Consultation Information' ||
+        extractedData?.documentType === 'consultation' ||
+        extractedData?.documentType === 'Patient Consultation Information' ||
+        (extractedData as any)?.document_type === 'Patient Consultation Information';
+
+      const docType: 'lab_report' | 'consultation' = isConsult ? 'consultation' : 'lab_report';
 
       const transformed: ProcessedReport = {
         id: labReport.id.toString(),
@@ -277,11 +330,17 @@ export default function VerificationPage() {
               : ("completed" as const),
         processingProgress: 100,
         pdfUrl: "",
+        documentType: docType,
         patientInfo: {
-          name: extractedData?.patientInfo?.name || "",
+          name: extractedData?.patientInfo?.name || (extractedData as any)?.patient_demographics?.name_khmer || (extractedData as any)?.patient_demographics?.name || "",
           patientId: extractedData?.patientInfo?.patientId || "",
-          age: extractedData?.patientInfo?.age || "",
-          gender: extractedData?.patientInfo?.gender || "",
+          age: extractedData?.patientInfo?.age || (() => {
+            const a = (extractedData as any)?.patient_demographics?.age;
+            if (typeof a === 'string') return a;
+            if (a && typeof a === 'object') return `${a.years || 0} Y, ${a.months || 0} M, ${a.days || 0} D`;
+            return "";
+          })(),
+          gender: extractedData?.patientInfo?.gender || (extractedData as any)?.patient_demographics?.gender || "",
           phone: extractedData?.patientInfo?.phone || "",
         },
         labInfo: {
@@ -322,6 +381,36 @@ export default function VerificationPage() {
             flag: mapBackendFlag(test.flag ?? null),
           }));
         })(),
+        // Consultation-specific fields
+        ...(docType === 'consultation' ? {
+          consultationInfo: {
+            paymentType: extractedData?.consultationInfo?.paymentType || (extractedData as any)?.patient_demographics?.payment_type || "",
+            physician: extractedData?.consultationInfo?.physician || (extractedData as any)?.physician || "",
+            evaluateAt: extractedData?.consultationInfo?.evaluateAt || (extractedData as any)?.evaluation_date || "",
+          },
+          vitalSigns: {
+            systolicBp: extractedData?.vitalSigns?.systolicBp || (extractedData as any)?.vital_signs?.systolic_mmhg || "",
+            diastolicBp: extractedData?.vitalSigns?.diastolicBp || (extractedData as any)?.vital_signs?.diastolic_mmhg || "",
+            pulse: extractedData?.vitalSigns?.pulse || (extractedData as any)?.vital_signs?.pulse_bpm || "",
+            respiratoryRate: extractedData?.vitalSigns?.respiratoryRate || (extractedData as any)?.vital_signs?.respiratory_rate_per_mn || "",
+            temperature: extractedData?.vitalSigns?.temperature || (extractedData as any)?.vital_signs?.temperature_celsius || "",
+            o2Saturation: extractedData?.vitalSigns?.o2Saturation || (extractedData as any)?.vital_signs?.oxygen_saturation_percentage || "",
+            height: extractedData?.vitalSigns?.height || (extractedData as any)?.vital_signs?.height_cm || "",
+            weight: extractedData?.vitalSigns?.weight || (extractedData as any)?.vital_signs?.weight_kg || "",
+          },
+          clinicalRecords: {
+            chiefComplaint: extractedData?.clinicalRecords?.chiefComplaint || (extractedData as any)?.clinical_notes?.chief_complaint || "",
+            currentMedications: extractedData?.clinicalRecords?.currentMedications || (extractedData as any)?.clinical_notes?.current_medications || "",
+            evaluationSummary: extractedData?.clinicalRecords?.evaluationSummary || (extractedData as any)?.clinical_notes?.chief_complaint || "",
+          },
+          treatmentPlan: Array.isArray(extractedData?.treatmentPlan)
+            ? extractedData.treatmentPlan
+            : (extractedData as any)?.treatment_plan
+              ? Object.entries((extractedData as any).treatment_plan)
+                  .filter(([_, v]) => v != null && v !== "")
+                  .map(([k, v]) => ({ type: k, code: String(v) }))
+              : [],
+        } : {}),
         extracted_data: extractedData,
         original_filename: labReport.original_filename,
         uploader: labReport.uploader,
@@ -477,6 +566,7 @@ export default function VerificationPage() {
         status: "completed",
         processingProgress: 100,
         pdfUrl: "", // Placeholder for mock data
+        documentType: 'lab_report',
         patientInfo: {
           name: "សាន សេងយាន",
           patientId: "PT001871",
@@ -601,6 +691,106 @@ export default function VerificationPage() {
     );
   };
 
+  const updateConsultationInfo = (field: keyof ConsultationInfo, value: string) => {
+    if (!selectedReport) return;
+
+    const updatedReport = {
+      ...selectedReport,
+      consultationInfo: {
+        ...selectedReport.consultationInfo!,
+        [field]: value,
+      },
+    };
+
+    setSelectedReport(updatedReport);
+    setReports((prev) =>
+      prev.map((r) => (r.id === selectedReport.id ? updatedReport : r)),
+    );
+  };
+
+  const updateVitalSigns = (field: keyof VitalSigns, value: string) => {
+    if (!selectedReport) return;
+
+    const updatedReport = {
+      ...selectedReport,
+      vitalSigns: {
+        ...selectedReport.vitalSigns!,
+        [field]: value,
+      },
+    };
+
+    setSelectedReport(updatedReport);
+    setReports((prev) =>
+      prev.map((r) => (r.id === selectedReport.id ? updatedReport : r)),
+    );
+  };
+
+  const updateClinicalRecords = (field: keyof ClinicalRecords, value: string) => {
+    if (!selectedReport) return;
+
+    const updatedReport = {
+      ...selectedReport,
+      clinicalRecords: {
+        ...selectedReport.clinicalRecords!,
+        [field]: value,
+      },
+    };
+
+    setSelectedReport(updatedReport);
+    setReports((prev) =>
+      prev.map((r) => (r.id === selectedReport.id ? updatedReport : r)),
+    );
+  };
+
+  const updateTreatmentPlanItem = (index: number, field: keyof TreatmentPlanItem, value: string) => {
+    if (!selectedReport || !selectedReport.treatmentPlan) return;
+
+    const updatedPlan = selectedReport.treatmentPlan.map((item, i) =>
+      i === index ? { ...item, [field]: value } : item,
+    );
+
+    const updatedReport = {
+      ...selectedReport,
+      treatmentPlan: updatedPlan,
+    };
+
+    setSelectedReport(updatedReport);
+    setReports((prev) =>
+      prev.map((r) => (r.id === selectedReport.id ? updatedReport : r)),
+    );
+  };
+
+  const addTreatmentPlanItem = () => {
+    if (!selectedReport) return;
+
+    const updatedReport = {
+      ...selectedReport,
+      treatmentPlan: [
+        ...(selectedReport.treatmentPlan || []),
+        { type: "", code: "" },
+      ],
+    };
+
+    setSelectedReport(updatedReport);
+    setReports((prev) =>
+      prev.map((r) => (r.id === selectedReport.id ? updatedReport : r)),
+    );
+  };
+
+  const removeTreatmentPlanItem = (index: number) => {
+    if (!selectedReport || !selectedReport.treatmentPlan) return;
+
+    const updatedReport = {
+      ...selectedReport,
+      treatmentPlan: selectedReport.treatmentPlan.filter((_, i) => i !== index),
+    };
+
+    setSelectedReport(updatedReport);
+    setReports((prev) =>
+      prev.map((r) => (r.id === selectedReport.id ? updatedReport : r)),
+    );
+  };
+
   const addNewCategory = () => {
     setShowCategoryModal(true);
   };
@@ -678,8 +868,11 @@ export default function VerificationPage() {
 
     try {
 
+      const isConsultation = selectedReport.documentType === 'consultation';
+
       const verifiedData = {
         verified_data: {
+          documentType: selectedReport.documentType,
           patientInfo: {
             name: selectedReport.patientInfo.name,
             patientId: selectedReport.patientInfo.patientId,
@@ -687,28 +880,38 @@ export default function VerificationPage() {
             gender: selectedReport.patientInfo.gender,
             phone: selectedReport.patientInfo.phone,
           },
-          labInfo: {
-            labId: selectedReport.labInfo.labId,
-            requestedBy: selectedReport.labInfo.requestedBy,
-            requestedDate: selectedReport.labInfo.requestedDate,
-            collectedDate: selectedReport.labInfo.collectedDate,
-            analysisDate: selectedReport.labInfo.analysisDate,
-            validatedBy: selectedReport.labInfo.validatedBy,
-          },
-          testResults: selectedReport.testResults.map((test) => ({
-            category: test.category,
-            testName: test.testName,
-            result: test.result,
-            unit: test.unit,
-            referenceRange: test.referenceRange,
-            flag: mapFrontendFlag(test.flag),
-          })),
+          ...(isConsultation
+            ? {
+                consultationInfo: selectedReport.consultationInfo || { paymentType: "", physician: "", evaluateAt: "" },
+                vitalSigns: selectedReport.vitalSigns || { systolicBp: "", diastolicBp: "", pulse: "", respiratoryRate: "", temperature: "", o2Saturation: "", height: "", weight: "" },
+                clinicalRecords: selectedReport.clinicalRecords || { chiefComplaint: "", currentMedications: "", evaluationSummary: "" },
+                treatmentPlan: selectedReport.treatmentPlan || [],
+              }
+            : {
+                labInfo: {
+                  labId: selectedReport.labInfo.labId,
+                  requestedBy: selectedReport.labInfo.requestedBy,
+                  requestedDate: selectedReport.labInfo.requestedDate,
+                  collectedDate: selectedReport.labInfo.collectedDate,
+                  analysisDate: selectedReport.labInfo.analysisDate,
+                  validatedBy: selectedReport.labInfo.validatedBy,
+                },
+                testResults: selectedReport.testResults.map((test) => ({
+                  category: test.category,
+                  testName: test.testName,
+                  result: test.result,
+                  unit: test.unit,
+                  referenceRange: test.referenceRange,
+                  flag: mapFrontendFlag(test.flag),
+                })),
+              }),
         },
         notes: `Verified by ${currentUser.name} on ${new Date().toLocaleDateString()}`,
       };
       const response = await apiClient.post(
         `/lab-reports/${selectedReport.id}/verify`,
-        verifiedData,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        verifiedData as any,
       );
       if (response.success) {
         const updatedReport = {
@@ -1171,131 +1374,274 @@ export default function VerificationPage() {
                   </div>
                 </div>
 
-                {/* Lab Information */}
-                <div className="bg-white shadow rounded-lg">
-                  <div className="px-6 py-4 border-b border-gray-200">
-                    <h3 className="text-lg font-medium text-gray-900 flex items-center">
-                      <FileText className="h-5 w-5 mr-2 text-green-600" />
-                      Laboratory Information
-                    </h3>
-                  </div>
-                  <div className="p-6 grid grid-cols-2 gap-4">
-                    {Object.entries(selectedReport.labInfo).map(
-                      ([key, value]) => (
-                        <div key={key}>
-                          <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
-                            {key.replace(/([A-Z])/g, " $1").trim()}
+                {/* Conditional rendering: Consultation vs Lab Report */}
+                {selectedReport.documentType === 'consultation' ? (
+                  <>
+                    {/* Consultation Details */}
+                    <div className="bg-white shadow rounded-lg">
+                      <div className="px-6 py-4 border-b border-gray-200">
+                        <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                          <Stethoscope className="h-5 w-5 mr-2 text-green-600" />
+                          Consultation Details
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Payment Type
                           </label>
                           <input
                             type="text"
-                            value={value}
-                            onChange={(e) =>
-                              updateLabInfo(
-                                key as keyof LabInfo,
-                                e.target.value,
-                              )
-                            }
+                            value={selectedReport.consultationInfo?.paymentType || ""}
+                            onChange={(e) => updateConsultationInfo("paymentType", e.target.value)}
                             className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
-                            placeholder={`Enter ${key
-                              .replace(/([A-Z])/g, " $1")
-                              .trim()
-                              .toLowerCase()}`}
+                            placeholder="Enter payment type"
                           />
                         </div>
-                      ),
-                    )}
-                  </div>
-                </div>
-
-                {/* Raw OCR Text - Admin Only */}
-                {user?.role === 'admin' && (
-                <div className="bg-white shadow rounded-lg">
-                  <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900 flex items-center">
-                        <FileText className="h-5 w-5 mr-2 text-purple-600" />
-                        Extracted Raw Text
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-1">
-                        Stored OCR text for audit, review, and re-parsing.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={copyRawText}
-                      disabled={!selectedReport.rawOcrText}
-                      className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Copy Text
-                    </button>
-                  </div>
-                  <div className="p-6">
-                    {selectedReport.rawOcrText ? (
-                      <pre className="max-h-96 overflow-auto whitespace-pre-wrap wrap-break-word text-xs leading-5 text-gray-800 bg-gray-50 border border-gray-200 rounded-md p-4 font-mono">
-                        {selectedReport.rawOcrText}
-                      </pre>
-                    ) : (
-                      <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
-                        Raw OCR text is not available for this report.
-                      </div>
-                    )}
-                  </div>
-                </div>
-                )}
-
-                {/* Test Results by Category */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xl font-bold text-gray-900">
-                      Test Results
-                    </h3>
-                    <button
-                      onClick={addNewCategory}
-                      className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Category
-                    </button>
-                  </div>
-
-                  {Object.entries(groupedTestResults).map(
-                    ([category, tests]) => (
-                      <div
-                        key={category}
-                        className="bg-white shadow rounded-lg"
-                      >
-                        <div className="px-6 py-4 border-b border-gray-200">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-lg font-medium text-gray-900 uppercase tracking-wide">
-                              {category}
-                            </h4>
-                            <button
-                              onClick={() => addTestResult(category)}
-                              className="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              Add Test
-                            </button>
-                          </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Physician
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedReport.consultationInfo?.physician || ""}
+                            onChange={(e) => updateConsultationInfo("physician", e.target.value)}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter physician"
+                          />
                         </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Evaluate At
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedReport.consultationInfo?.evaluateAt || ""}
+                            onChange={(e) => updateConsultationInfo("evaluateAt", e.target.value)}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter evaluation date/time"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Vital Signs */}
+                    <div className="bg-white shadow rounded-lg">
+                      <div className="px-6 py-4 border-b border-gray-200">
+                        <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                          <Activity className="h-5 w-5 mr-2 text-red-600" />
+                          Vital Signs
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Systolic BP
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedReport.vitalSigns?.systolicBp || ""}
+                            onChange={(e) => updateVitalSigns("systolicBp", e.target.value)}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter systolic BP"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Diastolic BP
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedReport.vitalSigns?.diastolicBp || ""}
+                            onChange={(e) => updateVitalSigns("diastolicBp", e.target.value)}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter diastolic BP"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Pulse
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedReport.vitalSigns?.pulse || ""}
+                            onChange={(e) => updateVitalSigns("pulse", e.target.value)}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter pulse"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Respiratory Rate
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedReport.vitalSigns?.respiratoryRate || ""}
+                            onChange={(e) => updateVitalSigns("respiratoryRate", e.target.value)}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter respiratory rate"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Temperature
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedReport.vitalSigns?.temperature || ""}
+                            onChange={(e) => updateVitalSigns("temperature", e.target.value)}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter temperature"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            O2 Saturation
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedReport.vitalSigns?.o2Saturation || ""}
+                            onChange={(e) => updateVitalSigns("o2Saturation", e.target.value)}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter O2 saturation"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Height
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedReport.vitalSigns?.height || ""}
+                            onChange={(e) => updateVitalSigns("height", e.target.value)}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter height"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Weight
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedReport.vitalSigns?.weight || ""}
+                            onChange={(e) => updateVitalSigns("weight", e.target.value)}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter weight"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Clinical Notes */}
+                    <div className="bg-white shadow rounded-lg">
+                      <div className="px-6 py-4 border-b border-gray-200">
+                        <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                          <ClipboardList className="h-5 w-5 mr-2 text-purple-600" />
+                          Clinical Notes
+                        </h3>
+                      </div>
+                      <div className="p-6 space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Chief Complaint
+                          </label>
+                          <textarea
+                            value={selectedReport.clinicalRecords?.chiefComplaint || ""}
+                            onChange={(e) => updateClinicalRecords("chiefComplaint", e.target.value)}
+                            rows={3}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter chief complaint"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Current Medications
+                          </label>
+                          <textarea
+                            value={selectedReport.clinicalRecords?.currentMedications || ""}
+                            onChange={(e) => updateClinicalRecords("currentMedications", e.target.value)}
+                            rows={3}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter current medications"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Evaluation Summary
+                          </label>
+                          <textarea
+                            value={selectedReport.clinicalRecords?.evaluationSummary || ""}
+                            onChange={(e) => updateClinicalRecords("evaluationSummary", e.target.value)}
+                            rows={3}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                            placeholder="Enter evaluation summary"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Raw OCR Text - Admin Only (Consultation) */}
+                    {user?.role === 'admin' && (
+                    <div className="bg-white shadow rounded-lg">
+                      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                            <FileText className="h-5 w-5 mr-2 text-purple-600" />
+                            Extracted Raw Text
+                          </h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Stored OCR text for audit, review, and re-parsing.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={copyRawText}
+                          disabled={!selectedReport.rawOcrText}
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Copy Text
+                        </button>
+                      </div>
+                      <div className="p-6">
+                        {selectedReport.rawOcrText ? (
+                          <pre className="max-h-96 overflow-auto whitespace-pre-wrap wrap-break-word text-xs leading-5 text-gray-800 bg-gray-50 border border-gray-200 rounded-md p-4 font-mono">
+                            {selectedReport.rawOcrText}
+                          </pre>
+                        ) : (
+                          <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                            Raw OCR text is not available for this report.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    )}
+
+                    {/* Treatment Plan */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-bold text-gray-900">
+                          Treatment Plan
+                        </h3>
+                        <button
+                          onClick={addTreatmentPlanItem}
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Item
+                        </button>
+                      </div>
+
+                      <div className="bg-white shadow rounded-lg">
                         <div className="overflow-x-auto">
                           <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                  Test Name
+                                  Type
                                 </th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                  Result
-                                </th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                  Unit
-                                </th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                  Reference Range
-                                </th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                  Flag
+                                  Code
                                 </th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                   Action
@@ -1303,103 +1649,287 @@ export default function VerificationPage() {
                               </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                              {tests.map((test) => (
-                                <tr key={test.id} className="hover:bg-gray-50">
+                              {(selectedReport.treatmentPlan || []).map((item, index) => (
+                                <tr key={index} className="hover:bg-gray-50">
                                   <td className="px-4 py-3">
                                     <input
                                       type="text"
-                                      value={test.testName}
+                                      value={item.type}
                                       onChange={(e) =>
-                                        updateTestResult(
-                                          test.id,
-                                          "testName",
-                                          e.target.value,
-                                        )
+                                        updateTreatmentPlanItem(index, "type", e.target.value)
                                       }
                                       className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
-                                      placeholder="Test name"
+                                      placeholder="Type"
                                     />
                                   </td>
                                   <td className="px-4 py-3">
                                     <input
                                       type="text"
-                                      value={test.result}
+                                      value={item.code}
                                       onChange={(e) =>
-                                        updateTestResult(
-                                          test.id,
-                                          "result",
-                                          e.target.value,
-                                        )
+                                        updateTreatmentPlanItem(index, "code", e.target.value)
                                       }
                                       className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
-                                      placeholder="Result"
+                                      placeholder="Code"
                                     />
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <input
-                                      type="text"
-                                      value={test.unit}
-                                      onChange={(e) =>
-                                        updateTestResult(
-                                          test.id,
-                                          "unit",
-                                          e.target.value,
-                                        )
-                                      }
-                                      className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
-                                      placeholder="Unit"
-                                    />
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <input
-                                      type="text"
-                                      value={test.referenceRange}
-                                      onChange={(e) =>
-                                        updateTestResult(
-                                          test.id,
-                                          "referenceRange",
-                                          e.target.value,
-                                        )
-                                      }
-                                      className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
-                                      placeholder="Reference range"
-                                    />
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    {renderFlagDropdown(test)}
                                   </td>
                                   <td className="px-4 py-3">
                                     <button
-                                      onClick={() => removeTestResult(test.id)}
+                                      onClick={() => removeTreatmentPlanItem(index)}
                                       className="text-red-600 hover:text-red-800"
-                                      title="Remove test"
+                                      title="Remove item"
                                     >
                                       <Trash2 className="h-4 w-4" />
                                     </button>
                                   </td>
                                 </tr>
                               ))}
+                              {(!selectedReport.treatmentPlan || selectedReport.treatmentPlan.length === 0) && (
+                                <tr>
+                                  <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
+                                    No treatment plan items. Click &quot;Add Item&quot; to add one.
+                                  </td>
+                                </tr>
+                              )}
                             </tbody>
                           </table>
                         </div>
                       </div>
-                    ),
-                  )}
-
-                  {Object.keys(groupedTestResults).length === 0 && (
-                    <div className="bg-white shadow rounded-lg p-8 text-center">
-                      <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-500">No test results found</p>
-                      <button
-                        onClick={addNewCategory}
-                        className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add First Category
-                      </button>
                     </div>
-                  )}
-                </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Lab Information */}
+                    <div className="bg-white shadow rounded-lg">
+                      <div className="px-6 py-4 border-b border-gray-200">
+                        <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                          <FileText className="h-5 w-5 mr-2 text-green-600" />
+                          Laboratory Information
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 gap-4">
+                        {Object.entries(selectedReport.labInfo).map(
+                          ([key, value]) => (
+                            <div key={key}>
+                              <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
+                                {key.replace(/([A-Z])/g, " $1").trim()}
+                              </label>
+                              <input
+                                type="text"
+                                value={value}
+                                onChange={(e) =>
+                                  updateLabInfo(
+                                    key as keyof LabInfo,
+                                    e.target.value,
+                                  )
+                                }
+                                className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                placeholder={`Enter ${key
+                                  .replace(/([A-Z])/g, " $1")
+                                  .trim()
+                                  .toLowerCase()}`}
+                              />
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Raw OCR Text - Admin Only */}
+                    {user?.role === 'admin' && (
+                    <div className="bg-white shadow rounded-lg">
+                      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                            <FileText className="h-5 w-5 mr-2 text-purple-600" />
+                            Extracted Raw Text
+                          </h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Stored OCR text for audit, review, and re-parsing.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={copyRawText}
+                          disabled={!selectedReport.rawOcrText}
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Copy Text
+                        </button>
+                      </div>
+                      <div className="p-6">
+                        {selectedReport.rawOcrText ? (
+                          <pre className="max-h-96 overflow-auto whitespace-pre-wrap wrap-break-word text-xs leading-5 text-gray-800 bg-gray-50 border border-gray-200 rounded-md p-4 font-mono">
+                            {selectedReport.rawOcrText}
+                          </pre>
+                        ) : (
+                          <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                            Raw OCR text is not available for this report.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    )}
+
+                    {/* Test Results by Category */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-bold text-gray-900">
+                          Test Results
+                        </h3>
+                        <button
+                          onClick={addNewCategory}
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Category
+                        </button>
+                      </div>
+
+                      {Object.entries(groupedTestResults).map(
+                        ([category, tests]) => (
+                          <div
+                            key={category}
+                            className="bg-white shadow rounded-lg"
+                          >
+                            <div className="px-6 py-4 border-b border-gray-200">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-lg font-medium text-gray-900 uppercase tracking-wide">
+                                  {category}
+                                </h4>
+                                <button
+                                  onClick={() => addTestResult(category)}
+                                  className="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Add Test
+                                </button>
+                              </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                      Test Name
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                      Result
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                      Unit
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                      Reference Range
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                      Flag
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                      Action
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {tests.map((test) => (
+                                    <tr key={test.id} className="hover:bg-gray-50">
+                                      <td className="px-4 py-3">
+                                        <input
+                                          type="text"
+                                          value={test.testName}
+                                          onChange={(e) =>
+                                            updateTestResult(
+                                              test.id,
+                                              "testName",
+                                              e.target.value,
+                                            )
+                                          }
+                                          className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                          placeholder="Test name"
+                                        />
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <input
+                                          type="text"
+                                          value={test.result}
+                                          onChange={(e) =>
+                                            updateTestResult(
+                                              test.id,
+                                              "result",
+                                              e.target.value,
+                                            )
+                                          }
+                                          className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                          placeholder="Result"
+                                        />
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <input
+                                          type="text"
+                                          value={test.unit}
+                                          onChange={(e) =>
+                                            updateTestResult(
+                                              test.id,
+                                              "unit",
+                                              e.target.value,
+                                            )
+                                          }
+                                          className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                          placeholder="Unit"
+                                        />
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <input
+                                          type="text"
+                                          value={test.referenceRange}
+                                          onChange={(e) =>
+                                            updateTestResult(
+                                              test.id,
+                                              "referenceRange",
+                                              e.target.value,
+                                            )
+                                          }
+                                          className="block w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                                          placeholder="Reference range"
+                                        />
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        {renderFlagDropdown(test)}
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <button
+                                          onClick={() => removeTestResult(test.id)}
+                                          className="text-red-600 hover:text-red-800"
+                                          title="Remove test"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ),
+                      )}
+
+                      {Object.keys(groupedTestResults).length === 0 && (
+                        <div className="bg-white shadow rounded-lg p-8 text-center">
+                          <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-500">No test results found</p>
+                          <button
+                            onClick={addNewCategory}
+                            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add First Category
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <div className="bg-white shadow rounded-lg p-12 text-center">

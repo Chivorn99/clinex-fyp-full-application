@@ -264,26 +264,48 @@ def _build_llm_system_prompt(template: Dict[str, Any]) -> str:
         "but the FLAG must only be H, L, or null.\n"
         "12. 'BIOCHIMISTRY' is a misspelling of 'BIOCHEMISTRY' — normalize to 'BIOCHEMISTRY'.\n"
         "13. 'ENNZYMOLOGY' is a misspelling of 'ENZYMOLOGY' — normalize to 'ENZYMOLOGY'.\n"
-        "14. Fix OCR double-character typos in test names: 'Chollesterole' → 'Cholesterol', "
-        "'Tryglyceride' → 'Triglyceride', 'Creatinine, , serum' → 'Creatinine, serum'.\n"
+        "14. The OCR text may contain multiple test categories (e.g., BIOCHEMISTRY, HEMATOLOGY, ENZYMOLOGY). Pay close attention to the headers in the text and categorize each test accordingly. Extract ALL tests from the entire document.\n"
+        "15. Preserve test names exactly as they appear in the original text, including typos and variations (e.g. 'Cholesterole Total', 'Tryglyceride', 'Uric acide'). Do NOT fix spelling in test names.\n"
     )
 
 
 def _build_llm_user_prompt(raw_text: str, template: Dict[str, Any]) -> str:
     """Build the user prompt with raw OCR text and few-shot examples."""
+    doc_type = detect_document_type(raw_text)
     examples = template.get('few_shot_examples', [])
 
-    prompt_parts = ["Extract all structured data from this lab report OCR text.\n"]
+    # Filter examples to match document type so lab examples don't confuse consultation extraction
+    if examples:
+        filtered = []
+        for ex in examples:
+            output = ex.get('output', {})
+            # Consultation examples have 'vital_signs' or 'patient_demographics' keys
+            is_consultation_example = 'vital_signs' in output or 'patient_demographics' in output
+            # Lab examples have 'testResults' or 'labInfo' keys
+            is_lab_example = 'testResults' in output or 'labInfo' in output
+
+            if doc_type == 'consultation' and is_consultation_example:
+                filtered.append(ex)
+            elif doc_type != 'consultation' and is_lab_example:
+                filtered.append(ex)
+        examples = filtered
+
+    if doc_type == 'consultation':
+        doc_label = 'patient consultation form'
+    else:
+        doc_label = 'lab report'
+
+    prompt_parts = [f"Extract all structured data from this {doc_label} OCR text.\n"]
 
     if examples:
         # Prioritize the most recent (verified) examples to adapt to current formats
-        selected_examples = examples[-2:] if len(examples) > 2 else examples
+        selected_examples = examples[-4:] if len(examples) > 4 else examples
         prompt_parts.append("=== FEW-SHOT EXAMPLES ===\n")
         for i, ex in enumerate(selected_examples, 1):
             prompt_parts.append(f"--- Example {i} Input ---\n{ex['input']}\n")
             prompt_parts.append(f"--- Example {i} Output ---\n{json.dumps(ex['output'], ensure_ascii=False)}\n")
 
-    prompt_parts.append("=== ACTUAL LAB REPORT TO EXTRACT ===\n")
+    prompt_parts.append(f"=== ACTUAL {doc_label.upper()} TO EXTRACT ===\n")
     prompt_parts.append(raw_text)
 
     return "\n".join(prompt_parts)
@@ -304,12 +326,29 @@ def detect_document_type(ocr_text: str) -> str:
 
 def _build_consultation_system_prompt(template: Dict[str, Any]) -> str:
     return (
-        "You are a medical data extractor for hospital consultation forms.\n\n"
+        "You are a medical data extractor for Cambodian hospital Patient Consultation forms.\n"
+        "Extract structured JSON from raw OCR text.\n\n"
         "STRICT RULES:\n"
-        "1. Extract patient demographics, normalizing age to years/months/days integers.\n"
-        "2. Strip LaTeX notation from vital signs (e.g. $36,5^{\\circ}C$ -> 36.5, $80/mn$ -> 80).\n"
-        "3. Parse blood pressure into systolic and diastolic numbers.\n"
-        "4. If a value cannot be determined, use null.\n"
+        "1. hospital_name: Look for 'KV Hospital' or similar hospital name in the header. Default to 'KV Hospital' if the text contains 'KV' or 'HOSPITAL'.\n"
+        "2. document_type: Always output 'Patient Consultation Information'.\n"
+        "3. physician: Extract the doctor name (e.g. 'Dr. LEANG Choeu'). It may appear after 'Physician :' or at the bottom as 'Physician's Name'.\n"
+        "4. evaluation_date: Convert from DD/MM/YYYY HH:MM format to YYYY-MM-DD HH:MM:SS. Example: '31/03/2024 13:34' -> '2024-03-31 13:34:00'.\n"
+        "5. patient_demographics.name_khmer: Extract the Khmer patient name after 'Patient :' or 'ឈ្មោះ'. The name may contain garbled Unicode — extract the best text available.\n"
+        "6. patient_demographics.gender: Output 'Male' or 'Female'. Map 'M' to 'Male', 'F' to 'Female'.\n"
+        "7. patient_demographics.payment_type: Extract text after 'Payment Type :' (e.g. 'ប.ស.ស', 'GIS', 'Insurance').\n"
+        "8. patient_demographics.age: Parse into integer years, months, days. "
+        "The OCR may format age as '51 ñ/year, 11 18/month, 14 iŃj/day' — extract the FIRST number for years, months, days respectively. "
+        "Garbled Khmer text between numbers should be ignored.\n"
+        "9. vital_signs: The OCR text shows vital signs with labels like '(Systolic)', '(Diastolic)', '(Pulse)', '(RR)', '(Temperature)', '(O2sat)', '(Height)', '(Weight)'. "
+        "Extract the numeric values. Strip units like /mmHg, /mn, °C, %, cm, kg. "
+        "Example: '107/mmHg' -> systolic_mmhg: 107, '75/mmHg' -> diastolic_mmhg: 75, '80 /mn' -> pulse_bpm: 80, '36,5 °C' -> temperature_celsius: 36.5.\n"
+        "10. If vital signs section is empty or missing, output an object with all null values, NOT an empty array.\n"
+        "11. clinical_notes.chief_complaint: Extract text after '(Chief complain)' or 'Chief Complaint'. May be in French (e.g. 'douleur de la pièd droite').\n"
+        "12. clinical_notes.current_medications: Extract text after '(Current medications)'.\n"
+        "13. treatment_plan: Extract prescription_id (after 'Prescription') and laboratory_id (after 'Laboratory'). These are codes like 'PRE001226', 'PAR004366'.\n"
+        "14. Ignore hospital phone numbers: 097 840 47 89, 012 89 17 45, 012 28 60 70.\n"
+        "15. The OCR text contains garbled Khmer Unicode characters — focus on extracting English values and numbers.\n"
+        "16. If a value cannot be determined, use null — NEVER make up data.\n"
     )
 
 def _get_consultation_json_schema() -> Dict[str, Any]:
@@ -332,9 +371,11 @@ def _get_consultation_json_schema() -> Dict[str, Any]:
                             "years": {"type": ["integer", "null"]},
                             "months": {"type": ["integer", "null"]},
                             "days": {"type": ["integer", "null"]}
-                        }
+                        },
+                        "required": ["years", "months", "days"]
                     }
-                }
+                },
+                "required": ["name_khmer", "gender", "payment_type", "age"]
             },
             "vital_signs": {
                 "type": "object",
@@ -347,24 +388,29 @@ def _get_consultation_json_schema() -> Dict[str, Any]:
                     "oxygen_saturation_percentage": {"type": ["number", "null"]},
                     "height_cm": {"type": ["number", "null"]},
                     "weight_kg": {"type": ["number", "null"]}
-                }
+                },
+                "required": ["systolic_mmhg", "diastolic_mmhg", "pulse_bpm", "respiratory_rate_per_mn",
+                             "temperature_celsius", "oxygen_saturation_percentage", "height_cm", "weight_kg"]
             },
             "clinical_notes": {
                 "type": "object",
                 "properties": {
                     "chief_complaint": {"type": ["string", "null"]},
                     "current_medications": {"type": ["string", "null"]}
-                }
+                },
+                "required": ["chief_complaint", "current_medications"]
             },
             "treatment_plan": {
                 "type": "object",
                 "properties": {
                     "prescription_id": {"type": ["string", "null"]},
                     "laboratory_id": {"type": ["string", "null"]}
-                }
+                },
+                "required": ["prescription_id", "laboratory_id"]
             }
         },
-        "required": ["hospital_name", "document_type", "patient_demographics", "vital_signs"]
+        "required": ["hospital_name", "document_type", "physician", "evaluation_date",
+                     "patient_demographics", "vital_signs", "clinical_notes", "treatment_plan"]
     }
 
 def _get_ollama_json_schema(template: Dict[str, Any]) -> Dict[str, Any]:
@@ -383,7 +429,7 @@ def _get_ollama_json_schema(template: Dict[str, Any]) -> Dict[str, Any]:
             "flag": {"type": ["string", "null"], "enum": ["H", "L", None]},
             "category": {"type": "string"}
         },
-        "required": ["testName", "result", "category"]
+        "required": ["testName", "result", "unit", "referenceRange", "flag", "category"]
     }
     
     if categories:
@@ -464,55 +510,75 @@ def extract_with_llm(raw_text: str, template: Dict[str, Any]) -> Optional[Dict[s
         "stream": False,
         "options": {
             "temperature": 0,
-            "num_ctx": 4096,
+            "num_ctx": 32768,
+            "num_predict": 4096,
         }
     }
 
-    try:
-        print(f'DEBUG: Calling Ollama ({model}) at {api_url}...', file=sys.stderr)
-        start = time.time()
-        resp = http_requests.post(
-            api_url,
-            json=payload,
-            timeout=ollama_config['timeout']
-        )
-        elapsed = time.time() - start
-        print(f'DEBUG: Ollama responded in {elapsed:.1f}s (status {resp.status_code})', file=sys.stderr)
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            print(f'DEBUG: Calling Ollama ({model}) at {api_url} (attempt {attempt}/{max_retries})...', file=sys.stderr)
+            start = time.time()
+            resp = http_requests.post(
+                api_url,
+                json=payload,
+                timeout=ollama_config['timeout']
+            )
+            elapsed = time.time() - start
+            print(f'DEBUG: Ollama responded in {elapsed:.1f}s (status {resp.status_code})', file=sys.stderr)
 
-        if resp.status_code != 200:
-            print(f'DEBUG: Ollama error: {resp.text[:500]}', file=sys.stderr)
+            if resp.status_code != 200:
+                print(f'DEBUG: Ollama error (attempt {attempt}): {resp.text[:500]}', file=sys.stderr)
+                if attempt < max_retries:
+                    sleep(2 ** attempt)
+                    continue
+                return None
+
+            response_data = resp.json()
+            content = response_data.get('message', {}).get('content', '')
+
+            if not content:
+                print(f'DEBUG: Ollama returned empty content (attempt {attempt})', file=sys.stderr)
+                if attempt < max_retries:
+                    sleep(2 ** attempt)
+                    continue
+                return None
+
+            # Parse the JSON content from the LLM response
+            result = json.loads(content) if isinstance(content, str) else content
+            print(f'DEBUG: Ollama extracted {len(result.get("testResults", []))} test results', file=sys.stderr)
+
+            # ── Anchor-based post-processing ──
+            anchor_key = _detect_hospital_anchor(raw_text)
+            if anchor_key:
+                result = _apply_hospital_anchor_overrides(result, anchor_key)
+
+            return result
+
+        except http_requests.exceptions.ConnectionError:
+            print(f'DEBUG: Ollama unreachable (attempt {attempt}/{max_retries})', file=sys.stderr)
+            if attempt < max_retries:
+                sleep(2 ** attempt)
+                continue
+            print('DEBUG: Ollama unreachable after all retries — falling back to regex', file=sys.stderr)
             return None
-
-        response_data = resp.json()
-        content = response_data.get('message', {}).get('content', '')
-
-        if not content:
-            print('DEBUG: Ollama returned empty content', file=sys.stderr)
+        except http_requests.exceptions.Timeout:
+            print(f'DEBUG: Ollama timed out (attempt {attempt}/{max_retries})', file=sys.stderr)
+            if attempt < max_retries:
+                sleep(2 ** attempt)
+                continue
+            print(f'DEBUG: Ollama timed out after all retries — falling back to regex', file=sys.stderr)
             return None
-
-        # Parse the JSON content from the LLM response
-        result = json.loads(content) if isinstance(content, str) else content
-        print(f'DEBUG: Ollama extracted {len(result.get("testResults", []))} test results', file=sys.stderr)
-
-        # ── Anchor-based post-processing ──
-        anchor_key = _detect_hospital_anchor(raw_text)
-        if anchor_key:
-            result = _apply_hospital_anchor_overrides(result, anchor_key)
-
-        return result
-
-    except http_requests.exceptions.ConnectionError:
-        print('DEBUG: Ollama unreachable (connection refused) — falling back to regex', file=sys.stderr)
-        return None
-    except http_requests.exceptions.Timeout:
-        print(f'DEBUG: Ollama timed out after {ollama_config["timeout"]}s', file=sys.stderr)
-        return None
-    except (json.JSONDecodeError, KeyError, TypeError) as e:
-        print(f'DEBUG: Failed to parse Ollama response: {e}', file=sys.stderr)
-        return None
-    except Exception as e:
-        print(f'DEBUG: Ollama call failed unexpectedly: {e}', file=sys.stderr)
-        return None
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            print(f'DEBUG: Failed to parse Ollama response (attempt {attempt}): {e}', file=sys.stderr)
+            if attempt < max_retries:
+                sleep(2 ** attempt)
+                continue
+            return None
+        except Exception as e:
+            print(f'DEBUG: Ollama call failed unexpectedly: {e}', file=sys.stderr)
+            return None
 
 
 def validate_consultation_extraction(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -1471,7 +1537,7 @@ class ConsultationReportParser:
         # ── Clinical notes ──
         chief_complaint = None
         cc_match = re.search(
-            r'(?:Chief\s*Complaint|Motif|CC)\s*:?\s*(.+?)(?=\n|Current|Medication|$)',
+            r'(?:Chief\s*Complain(?:t)?|Motif|CC|Summary)\s*:?\s*(.+?)(?=\n|Current|Medication|Evaluation|Treatment|$)',
             text, re.IGNORECASE
         )
         if cc_match:
@@ -1479,22 +1545,24 @@ class ConsultationReportParser:
 
         current_medications = None
         med_match = re.search(
-            r'(?:Current\s*Medications?|Traitement|Médicaments)\s*:?\s*(.+?)(?=\n|Prescription|Laboratory|$)',
+            r'(?:Current\s*Medications?|Traitement|Médicaments)\s*:?\s*(.+?)(?=\n|Prescription|Laboratory|Treatment|$)',
             text, re.IGNORECASE
         )
         if med_match:
             current_medications = med_match.group(1).strip()
 
         # ── Treatment plan ──
-        prescription_id = None
-        rx_match = re.search(r'(?:Prescription\s*ID|RX)\s*:?\s*(\S+)', text, re.IGNORECASE)
-        if rx_match:
-            prescription_id = rx_match.group(1).strip()
+        treatment_plan = {}
+        for tp_match in re.finditer(r'(Laboratory|Echography|Xray|ECG|ENT Endoscopy|Prescription|Pharmacy|Endoscopy)\s*:?\s*(PAR\d+|PRE\d+|\S+00\d+)', text, re.IGNORECASE):
+            treatment_plan[tp_match.group(1).strip()] = tp_match.group(2).strip()
 
-        laboratory_id = None
+        rx_match = re.search(r'(?:Prescription\s*ID|RX)\s*:?\s*(\S+)', text, re.IGNORECASE)
+        if rx_match and 'Prescription' not in treatment_plan:
+            treatment_plan['Prescription'] = rx_match.group(1).strip()
+
         lab_match = re.search(r'(?:Laboratory\s*ID|Lab\s*ID)\s*:?\s*(LT\d+|\S+)', text, re.IGNORECASE)
-        if lab_match:
-            laboratory_id = lab_match.group(1).strip()
+        if lab_match and 'Laboratory' not in treatment_plan:
+            treatment_plan['Laboratory'] = lab_match.group(1).strip()
 
         return {
             'hospital_name': hospital_name,
@@ -1521,10 +1589,7 @@ class ConsultationReportParser:
                 'chief_complaint': chief_complaint,
                 'current_medications': current_medications,
             },
-            'treatment_plan': {
-                'prescription_id': prescription_id,
-                'laboratory_id': laboratory_id,
-            },
+            'treatment_plan': treatment_plan,
         }
 
     def _find_vital(self, text: str, keywords: List[str]) -> Optional[str]:
@@ -1888,144 +1953,108 @@ class OptimizedLabReportParser:
                         if tn == 'Creatinine, serum':
                             unit = 'mg/dL'
                             reference_range = '(0.9 - 1.1)'
-                            result = result or '0.9'
                         elif tn == 'Urea/BUN':
                             unit = 'mg/dL'
                             reference_range = '(6.0 - 40.0)'
-                            result = result or '27'
                         elif tn == 'Cholesterole Total':
                             unit = 'mg/dL'
                             reference_range = '$(0-200)$'
-                            result = result or '197'
                         elif tn == 'Cholesterol-HDL':
                             unit = 'mg/dL'
                             reference_range = '(>60)'
-                            flag = 'L' if result == '50' else flag
-                            result = result or '50'
                         elif tn == 'Cholesterol-LDL':
                             unit = 'mg/dL'
                             reference_range = '$(0-150)$'
-                            result = result or '103'
                         elif tn == 'Tryglyceride':
                             unit = 'mg/dL'
                             reference_range = '$(0-150)$'
-                            result = result or '75'
                         elif tn == 'Uric acide':
                             unit = 'mg/dL'
                             reference_range = '$(3.5-6.0)$'
-                            result = result or '5.1'
                         elif tn == 'GGT (Gamm Glutamyl Transferas)':
                             unit = 'U/L'
                             reference_range = '$(0-55)$'
-                            result = result or '52'
                         elif tn == 'SGPT/ALT':
                             unit = '$U/L$'
                             reference_range = '$(0-41)$'
-                            result = result or '9'
                         elif tn == 'SGOT/AST':
                             unit = '$U/L$'
                             reference_range = '$(0-40)$'
-                            result = result or '26'
                         elif tn == 'Morphine':
                             unit = None
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'Amphetamine':
                             unit = None
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'Metamphetamine':
                             unit = None
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'WBC':
                             unit = '$10^{9}/L$'
                             reference_range = '(3.5-10.0)'
-                            result = result or '6.8'
                         elif tn == 'LYM%':
                             unit = '%'
                             reference_range = '(15.0-50.0)'
-                            result = result or '29.2'
                         elif tn == 'MONO%':
                             unit = '%'
                             reference_range = '(2.0-15.0)'
-                            result = result or '7.3'
                         elif tn == 'NUE%':
                             unit = '%'
                             reference_range = '(35.0-80.0)'
-                            result = result or '63.5'
                         elif tn == 'EOSINO%':
                             unit = '%'
                             reference_range = '(11.5-16.5)'
-                            result = result or '13.6'
                         elif tn == 'BASO%':
                             unit = '%'
                             reference_range = '(25.0-35.0)'
-                            result = result or '29.1'
                         elif tn == 'HGB':
                             unit = 'g/dL'
                             reference_range = '(31.0-38.0)'
-                            result = result or '36.7'
                         elif tn == 'MCH':
                             unit = 'pg'
                             reference_range = '(3.50-5.50)'
-                            result = result or '4.68'
                         elif tn == 'MCHC':
                             unit = 'g/dL'
                             reference_range = '(75.0-100.0)'
-                            result = result or '79.2'
                         elif tn == 'RBC':
                             unit = 'x1012/L'
                             reference_range = '(35.0-55.0)'
-                            result = result or '37.1'
                         elif tn == 'MCV':
                             unit = 'fl'
                             reference_range = '(150-400)'
-                            result = result or '195'
                         elif tn == 'LEU':
                             unit = 'Leu/µL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'NIT':
                             unit = None
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'URO':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or '0.2'
                         elif tn == 'PRO':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'PH':
                             unit = None
                             reference_range = None
-                            result = result or '6.5'
                         elif tn == 'BLO':
                             unit = 'Ery/pl'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'SG':
                             unit = None
                             reference_range = None
-                            result = result or '1.015'
                         elif tn == 'KET':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'BIL':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'GLU':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'ASC':
                             unit = 'mg/dL'
                             reference_range = None
-                            result = result or 'NEGATIVE'
                         elif tn == 'Group':
                             unit = None
                             reference_range = None
@@ -2184,6 +2213,156 @@ def extract_text_from_pdf_local(pdf_path: str) -> str:
     except Exception as e:
         raise Exception(f'All PDF extraction methods failed. Last error: {str(e)}')
 
+
+def _normalize_consultation_to_frontend(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Map consultation extraction schema into the patientInfo/testResults format
+    that the frontend verification page expects.
+
+    The frontend reads:
+      - patientInfo: { name, patientId, age, gender, phone }
+      - labInfo: { labId, requestedBy, requestedDate, ... }
+      - testResults: [ { category, testName, result, unit, referenceRange, flag } ]
+
+    Consultation forms extract:
+      - patient_demographics: { name_khmer, gender, payment_type, age }
+      - vital_signs: { systolic_mmhg, diastolic_mmhg, pulse_bpm, ... }
+      - clinical_notes: { chief_complaint, current_medications }
+      - treatment_plan: { prescription_id, laboratory_id }
+    """
+    demo = result.get('patient_demographics', {}) or {}
+    vital = result.get('vital_signs', {}) or {}
+    clinical = result.get('clinical_notes', {}) or {}
+    treatment = result.get('treatment_plan', {}) or {}
+
+    # ── Map patient_demographics → patientInfo ──
+    age_obj = demo.get('age', {})
+    if isinstance(age_obj, dict):
+        age_parts = []
+        if age_obj.get('years'):
+            age_parts.append(f"{age_obj['years']} Y")
+        if age_obj.get('months'):
+            age_parts.append(f"{age_obj['months']} M")
+        if age_obj.get('days'):
+            age_parts.append(f"{age_obj['days']} D")
+        age_str = ', '.join(age_parts) if age_parts else ''
+    else:
+        age_str = str(age_obj) if age_obj else ''
+
+    gender_raw = demo.get('gender', '') or ''
+    # Normalize 'Male'/'Female' to match frontend display
+    gender_str = gender_raw
+
+    result['patientInfo'] = {
+        'name': demo.get('name_khmer', '') or result.get('physician', '') or '',
+        'patientId': '',
+        'age': age_str,
+        'gender': gender_str,
+        'phone': '',
+    }
+
+    # ── Map physician + evaluation_date → labInfo ──
+    result['labInfo'] = {
+        'labId': treatment.get('laboratory_id', '') or '',
+        'requestedBy': result.get('physician', '') or '',
+        'requestedDate': result.get('evaluation_date', '') or '',
+        'collectedDate': '',
+        'analysisDate': '',
+        'validatedBy': result.get('physician', '') or '',
+    }
+
+    # ── Map vital_signs + clinical_notes + treatment_plan → testResults ──
+    test_results = []
+
+    # Vital signs as individual "test results"
+    vital_sign_labels = {
+        'systolic_mmhg': ('Systolic BP', 'mmHg', '90 - 140'),
+        'diastolic_mmhg': ('Diastolic BP', 'mmHg', '60 - 90'),
+        'pulse_bpm': ('Pulse', '/mn', '60 - 100'),
+        'respiratory_rate_per_mn': ('Respiratory Rate', '/mn', '12 - 20'),
+        'temperature_celsius': ('Temperature', '°C', '36.1 - 37.2'),
+        'oxygen_saturation_percentage': ('O2 Saturation', '%', '95 - 100'),
+        'height_cm': ('Height', 'cm', ''),
+        'weight_kg': ('Weight', 'kg', ''),
+    }
+
+    for key, (label, unit, ref_range) in vital_sign_labels.items():
+        value = vital.get(key)
+        if value is not None:
+            test_results.append({
+                'category': 'VITAL SIGNS',
+                'testName': label,
+                'result': str(value),
+                'unit': unit,
+                'referenceRange': ref_range,
+                'flag': None,
+            })
+
+    # Clinical notes as test results
+    if clinical.get('chief_complaint'):
+        test_results.append({
+            'category': 'CLINICAL NOTES',
+            'testName': 'Chief Complaint',
+            'result': clinical['chief_complaint'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+    if clinical.get('current_medications'):
+        test_results.append({
+            'category': 'CLINICAL NOTES',
+            'testName': 'Current Medications',
+            'result': clinical['current_medications'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+
+    # Treatment plan items as test results
+    if treatment.get('prescription_id'):
+        test_results.append({
+            'category': 'TREATMENT PLAN',
+            'testName': 'Prescription',
+            'result': treatment['prescription_id'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+    if treatment.get('laboratory_id'):
+        test_results.append({
+            'category': 'TREATMENT PLAN',
+            'testName': 'Laboratory',
+            'result': treatment['laboratory_id'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+
+    # Payment type and evaluation summary as info
+    if demo.get('payment_type'):
+        test_results.append({
+            'category': 'PATIENT INFO',
+            'testName': 'Payment Type',
+            'result': demo['payment_type'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+
+    if result.get('evaluation_summary'):
+        test_results.append({
+            'category': 'CLINICAL NOTES',
+            'testName': 'Evaluation Summary',
+            'result': result['evaluation_summary'],
+            'unit': '',
+            'referenceRange': '',
+            'flag': None,
+        })
+
+    result['testResults'] = test_results
+
+    return result
+
+
 def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = None, document_type: Optional[str] = None) -> Dict[str, Any]:
     paddle_config = {}
     kiri_config = {}
@@ -2327,7 +2506,8 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
         # Fallback to regex parser if LLM failed or no template
         if result is None:
             doc_type = document_type or detect_document_type(ocr_text)
-            if doc_type == 'consultation':
+            is_consult = doc_type in ('consultation', 'Patient Consultation Information') or (detect_document_type(ocr_text) == 'consultation')
+            if is_consult:
                 parser = ConsultationReportParser()
                 result = parser.parse_optimized(ocr_text)
                 result = validate_consultation_extraction(result)
@@ -2339,7 +2519,8 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
         elif template:
             # Re-run correct validator for LLM output
             doc_type = document_type or detect_document_type(ocr_text)
-            if doc_type == 'consultation':
+            is_consult = doc_type in ('consultation', 'Patient Consultation Information') or (detect_document_type(ocr_text) == 'consultation')
+            if is_consult:
                 result = validate_consultation_extraction(result)
 
         result['source_file'] = os.path.basename(file_path)
@@ -2348,6 +2529,15 @@ def process_single_file(file_path: str, template: Optional[Dict[str, Any]] = Non
         result['extraction_method'] = extraction_method
         result['rawText'] = ocr_text
         result['confidence'] = confidence
+
+        # ── Normalize consultation data into the frontend-expected format ──
+        # The frontend verification page reads patientInfo, labInfo, testResults
+        # but consultation forms store data as patient_demographics, vital_signs, etc.
+        doc_type_final = document_type or (result.get('document_type') if isinstance(result, dict) else None) or detect_document_type(ocr_text)
+        is_consult_final = doc_type_final in ('consultation', 'Patient Consultation Information') or (detect_document_type(ocr_text) == 'consultation')
+        if is_consult_final:
+            result = _normalize_consultation_to_frontend(result)
+
         return result
     except Exception as e:
         return {

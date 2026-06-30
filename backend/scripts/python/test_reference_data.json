@@ -1,0 +1,62 @@
+{
+  "biochemistry": {
+    "Creatinine, serum": { "unit": "mg/dL", "reference_range": "0.9 - 1.1" },
+    "Urea/BUN": { "unit": "mg/dL", "reference_range": "6.0 - 40.0" },
+    "Glucose": { "unit": "mg/dL", "reference_range": "75 - 115" },
+    "Cholesterole Total": { "unit": "mg/dL", "reference_range": "0 - 200" },
+    "Cholesterol-HDL": { "unit": "mg/dL", "reference_range": ">60" },
+    "Cholesterol-LDL": { "unit": "mg/dL", "reference_range": "0 - 150" },
+    "Tryglyceride": { "unit": "mg/dL", "reference_range": "0 - 150" },
+    "Uric acide": { "unit": "mg/dL", "reference_range": "3.5 - 6.0" }
+  },
+  "enzymology": {
+    "GGT": { "unit": "U/L", "reference_range": "0 - 55", "aliases": ["GGT (Gamm Glutamyl Transferas)"] },
+    "SGPT/ALT": { "unit": "U/L", "reference_range": "0 - 41" },
+    "SGOT/AST": { "unit": "U/L", "reference_range": "0 - 40" }
+  },
+  "hematology": {
+    "WBC": { "unit": "10^9/L", "reference_range": "3.5 - 10.0" },
+    "LYM%": { "unit": "%", "reference_range": "15.0 - 50.0" },
+    "MONO%": { "unit": "%", "reference_range": "2.0 - 15.0" },
+    "NUE%": { "unit": "%", "reference_range": "35.0 - 80.0" },
+    "EOSINO%": { "unit": "%", "reference_range": "11.5 - 16.5" },
+    "BASO%": { "unit": "%", "reference_range": "25.0 - 35.0" },
+    "HGB": { "unit": "g/dL", "reference_range": "31.0 - 38.0" },
+    "MCH": { "unit": "pg", "reference_range": "3.50 - 5.50" },
+    "MCHC": { "unit": "g/dL", "reference_range": "75.0 - 100.0" },
+    "RBC": { "unit": "x10^12/L", "reference_range": "35.0 - 55.0" },
+    "MCV": { "unit": "fl", "reference_range": "150 - 400" }
+  },
+  "drug_urine": {
+    "Morphine": { "unit": null, "reference_range": null },
+    "Amphetamine": { "unit": null, "reference_range": null },
+    "Metamphetamine": { "unit": null, "reference_range": null }
+  },
+  "urine_analysis": {
+    "LEU": { "unit": "Leu/µL", "reference_range": null },
+    "NIT": { "unit": null, "reference_range": null },
+    "URO": { "unit": "mg/dL", "reference_range": null },
+    "PRO": { "unit": "mg/dL", "reference_range": null },
+    "PH": { "unit": null, "reference_range": null },
+    "BLO": { "unit": "Ery/µL", "reference_range": null },
+    "SG": { "unit": null, "reference_range": null },
+    "KET": { "unit": "mg/dL", "reference_range": null },
+    "BIL": { "unit": "mg/dL", "reference_range": null },
+    "GLU": { "unit": "mg/dL", "reference_range": null },
+    "ASC": { "unit": "mg/dL", "reference_range": null }
+  },
+  "blood_group": {
+    "Group": { "unit": null, "reference_range": null },
+    "Rhesus": { "unit": null, "reference_range": null }
+  },
+  "category_aliases": {
+    "BIOCHIMISTRY": "biochemistry",
+    "BIOCHEMISTRY": "biochemistry",
+    "ENZYMOLOGY": "enzymology",
+    "HEMATOLOGY": "hematology",
+    "DRUG URINE": "drug_urine",
+    "URINE ANALYSIS": "urine_analysis",
+    "ABO BLOOD GROUP": "blood_group",
+    "SERO/IMMUNOLOGY": "sero_immunology"
+  }
+}
