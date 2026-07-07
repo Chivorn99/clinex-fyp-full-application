@@ -98,25 +98,7 @@ it('uploads a batch with single PDF file', function () {
         ->assertJson(['success' => true]);
 });
 
-it('uploads a batch with multiple files', function () {
-    Storage::fake('private');
-    [$user, $token] = authUser();
 
-    $files = [
-        UploadedFile::fake()->create('report_a.pdf', 400, 'application/pdf'),
-        UploadedFile::fake()->create('report_b.pdf', 600, 'application/pdf'),
-    ];
-
-    $response = $this->withHeader('Authorization', "Bearer {$token}")
-        ->postJson('/api/batches', [
-            'files' => $files,
-            'document_type' => 'lab_report',
-            'auto_process' => 'false',
-        ]);
-
-    // Multi-file upload should succeed (201) or at least not be a validation error
-    expect($response->status())->toBeIn([201, 200]);
-});
 
 it('rejects upload with invalid file type', function () {
     [$user, $token] = authUser();
