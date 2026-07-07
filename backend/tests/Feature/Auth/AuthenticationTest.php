@@ -9,6 +9,7 @@
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 
 // ─── Login ───────────────────────────────────────────────────────────
 
@@ -78,13 +79,14 @@ it('requires email and password for login', function () {
 // ─── Registration ────────────────────────────────────────────────────
 
 it('registers a new user successfully', function () {
-    $response = $this->postJson('/api/register', [
-        'name' => 'New Technician',
-        'email' => 'new@clinex.test',
-        'password' => 'Password123!',
-        'password_confirmation' => 'Password123!',
-        'role' => 'lab_technician',
-    ]);
+    $response = $this->withoutMiddleware(ThrottleRequests::class)
+        ->postJson('/api/register', [
+            'name' => 'New Technician',
+            'email' => 'new@clinex.test',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+            'role' => 'lab_technician',
+        ]);
 
     $response->assertStatus(201)
         ->assertJsonStructure([
@@ -103,52 +105,56 @@ it('registers a new user successfully', function () {
 it('rejects registration with duplicate email', function () {
     User::factory()->create(['email' => 'existing@clinex.test']);
 
-    $response = $this->postJson('/api/register', [
-        'name' => 'Duplicate User',
-        'email' => 'existing@clinex.test',
-        'password' => 'Password123!',
-        'password_confirmation' => 'Password123!',
-        'role' => 'lab_technician',
-    ]);
+    $response = $this->withoutMiddleware(ThrottleRequests::class)
+        ->postJson('/api/register', [
+            'name' => 'Duplicate User',
+            'email' => 'existing@clinex.test',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+            'role' => 'lab_technician',
+        ]);
 
     $response->assertStatus(422)
         ->assertJsonValidationErrors(['email']);
 });
 
 it('rejects registration with mismatched passwords', function () {
-    $response = $this->postJson('/api/register', [
-        'name' => 'New User',
-        'email' => 'new2@clinex.test',
-        'password' => 'Password123!',
-        'password_confirmation' => 'DifferentPassword!',
-        'role' => 'lab_technician',
-    ]);
+    $response = $this->withoutMiddleware(ThrottleRequests::class)
+        ->postJson('/api/register', [
+            'name' => 'New User',
+            'email' => 'new2@clinex.test',
+            'password' => 'Password123!',
+            'password_confirmation' => 'DifferentPassword!',
+            'role' => 'lab_technician',
+        ]);
 
     $response->assertStatus(422)
         ->assertJsonValidationErrors(['password']);
 });
 
 it('rejects registration with invalid role', function () {
-    $response = $this->postJson('/api/register', [
-        'name' => 'Bad Role',
-        'email' => 'badrole@clinex.test',
-        'password' => 'Password123!',
-        'password_confirmation' => 'Password123!',
-        'role' => 'superadmin',
-    ]);
+    $response = $this->withoutMiddleware(ThrottleRequests::class)
+        ->postJson('/api/register', [
+            'name' => 'Bad Role',
+            'email' => 'badrole@clinex.test',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+            'role' => 'superadmin',
+        ]);
 
     $response->assertStatus(422)
         ->assertJsonValidationErrors(['role']);
 });
 
 it('accepts admin role during registration', function () {
-    $response = $this->postJson('/api/register', [
-        'name' => 'Admin User',
-        'email' => 'admin@clinex.test',
-        'password' => 'Password123!',
-        'password_confirmation' => 'Password123!',
-        'role' => 'admin',
-    ]);
+    $response = $this->withoutMiddleware(ThrottleRequests::class)
+        ->postJson('/api/register', [
+            'name' => 'Admin User',
+            'email' => 'admin@clinex.test',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+            'role' => 'admin',
+        ]);
 
     $response->assertStatus(201);
     $this->assertDatabaseHas('users', [
@@ -169,8 +175,11 @@ it('logs out an authenticated user', function () {
     $response->assertOk()
         ->assertJson(['message' => 'Successfully logged out']);
 
-    // Token should be revoked
-    $this->assertDatabaseCount('personal_access_tokens', 0);
+    // The specific token should be revoked
+    $this->assertDatabaseMissing('personal_access_tokens', [
+        'tokenable_id' => $user->id,
+        'name' => 'auth_token',
+    ]);
 });
 
 it('rejects logout without authentication', function () {

@@ -248,6 +248,7 @@ it('creates a new template', function () {
             'name' => 'KVH Hospital Template',
             'hospital_code' => 'KVH',
             'schema' => ['panels' => ['hematology', 'biochemistry']],
+            'few_shot_examples' => [['input' => 'sample text', 'output' => '{"testResults": []}']],
         ]);
 
     $response->assertStatus(201)

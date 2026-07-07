@@ -55,6 +55,6 @@ it('detects processing status', function () {
     $batch = ReportBatch::factory()->create(['status' => 'processing']);
     expect($batch->isProcessing())->toBeTrue();
 
-    $batch2 = ReportBatch::factory()->create(['status' => 'uploaded']);
+    $batch2 = ReportBatch::factory()->create(['status' => 'pending']);
     expect($batch2->isProcessing())->toBeFalse();
 });
