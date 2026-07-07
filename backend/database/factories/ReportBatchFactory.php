@@ -19,7 +19,7 @@ class ReportBatchFactory extends Factory
             'processed_reports' => 0,
             'verified_reports' => 0,
             'failed_reports' => 0,
-            'status' => 'uploaded',
+            'status' => 'pending',
         ];
     }
 
