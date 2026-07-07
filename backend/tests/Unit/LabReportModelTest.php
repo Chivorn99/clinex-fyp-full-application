@@ -77,8 +77,8 @@ it('scopes by status', function () {
         'status' => 'failed',
     ]);
 
-    expect(LabReport::withStatus('processed')->count())->toBe(3);
-    expect(LabReport::withStatus('failed')->count())->toBe(2);
+    expect(LabReport::withStatus('processed')->where('batch_id', $batch->id)->count())->toBe(3);
+    expect(LabReport::withStatus('failed')->where('batch_id', $batch->id)->count())->toBe(2);
 });
 
 it('scopes by batch', function () {
