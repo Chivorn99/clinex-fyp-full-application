@@ -42,3 +42,22 @@ docs/images/figure_9_3_security_architecture.png
 PADDLEOCR_IMPLEMENTATION.md
 IMPLEMENTATION_COMPLETE.md
 OCR_SYSTEM_ARCHITECTURE.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files (safety net)
+.env
+.env.*
+!.env.example
+
+# Debug output
+test_llm.out
+test_llm.err
+
+# OS files
+.DS_Store
+Thumbs.db

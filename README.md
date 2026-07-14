@@ -1,15 +1,18 @@
 <div align="center">
 
+<img src="docs/images/clinex_banner.png" alt="Clinex Banner" width="100%">
+
 # 🏥 Clinex
 
 **Clinical Lab Report Management System**
 
 *Multi-engine OCR + LLM pipeline for digitizing Cambodian lab reports*
 
-[![Live Demo](https://img.shields.io/badge/Live-clinex.live-0ea5e9?style=for-the-badge&logo=vercel)](https://clinex.live)
-[![Laravel](https://img.shields.io/badge/Laravel-11-FF2D20?style=flat-square&logo=laravel&logoColor=white)](https://laravel.com)
-[![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org)
+[![Live Demo](https://img.shields.io/badge/Live-clinex.live-0ea5e9?style=for-the-badge)](https://clinex.live)
+[![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?style=flat-square&logo=laravel&logoColor=white)](https://laravel.com)
+[![Next.js](https://img.shields.io/badge/Next.js-15-000000?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Tests](https://img.shields.io/badge/Tests-118%20passed-brightgreen?style=flat-square)]()
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
 </div>
@@ -99,8 +102,8 @@ Upload PDF ──▶ Laravel Queue (Redis)
 
 | Layer | Technology |
 |-------|------------|
-| **Backend** | Laravel 11, PHP 8.2, Sanctum Auth |
-| **Frontend** | Next.js 14, React, Tailwind CSS |
+| **Backend** | Laravel 12, PHP 8.2, Sanctum Auth |
+| **Frontend** | Next.js 15, React 19, Tailwind CSS 4 |
 | **Database** | MySQL 8.4 |
 | **Cache / Queue** | Redis, Laravel Horizon |
 | **OCR Engine 1** | PaddleOCR v3.5 — English & numeric extraction |
@@ -112,6 +115,32 @@ Upload PDF ──▶ Laravel Queue (Redis)
 | **Containers** | Docker + Docker Compose |
 | **Build** | GNU Make |
 | **SSL** | Let's Encrypt (cloud), self-signed (intranet) |
+| **Testing** | Pest PHP v3 |
+
+---
+
+## 🧪 Testing & Performance
+
+### Automated Test Suite
+
+```
+Tests:    118 passed (282 assertions)
+Duration: 5.93s
+```
+
+| Category | Tests | Coverage |
+|----------|-------|----------|
+| **Unit Tests** | 34 | Models: User, LabReport, ReportBatch, ReportTemplate |
+| **Feature Tests** | 84 | Auth, Admin, Analytics, Lab Reports, Patients, Batches, Middleware |
+| **Total** | **118** | **100% pass rate** |
+
+### Stress Test Results (Production)
+
+| Endpoint | Requests | Concurrency | Req/sec | Failures |
+|----------|----------|-------------|---------|----------|
+| `GET /api/health` | 500 | 50 | **116.58/s** | 0 |
+| `GET /api/batches` (auth) | 100 | 10 | **51.71/s** | 0 |
+| `GET /api/patients` (auth) | 100 | 10 | **35.30/s** | 0 |
 
 ---
 
@@ -119,7 +148,7 @@ Upload PDF ──▶ Laravel Queue (Redis)
 
 ```
 clinex/
-├── backend/                   # Laravel 11 API
+├── backend/                   # Laravel 12 API
 │   ├── app/
 │   │   ├── Console/Commands/  # Artisan commands (stale job cleanup)
 │   │   ├── Http/Controllers/  # API controllers (Admin, Auth, Reports, Batches)
@@ -127,7 +156,7 @@ clinex/
 │   │   └── Models/            # Eloquent models (User, LabReport, ReportBatch, Patient)
 │   ├── config/clinex.php      # App-specific config (stale job threshold)
 │   └── scripts/python/        # OCR pipeline (document_ocr.py)
-├── frontend/                  # Next.js 14 App
+├── frontend/                  # Next.js 15 App
 │   └── src/app/
 │       ├── admin/             # Admin panel (Users, Reports, Templates, System Health)
 │       ├── dashboard/         # Main dashboard with analytics
